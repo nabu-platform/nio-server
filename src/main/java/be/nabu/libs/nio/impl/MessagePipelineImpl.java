@@ -20,7 +20,7 @@ import be.nabu.libs.nio.api.MessageParserFactory;
 import be.nabu.libs.nio.api.MessagePipeline;
 import be.nabu.libs.nio.api.MessageProcessor;
 import be.nabu.libs.nio.api.SecurityContext;
-import be.nabu.libs.nio.api.Server;
+import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.SourceContext;
 import be.nabu.utils.io.SSLServerMode;
 import be.nabu.utils.io.api.ByteBuffer;
@@ -32,7 +32,7 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private Future<?> futureRead, futureWrite, futureProcess;
-	private Server server;
+	private NIOServer server;
 	private SelectionKey selectionKey;
 	private Queue<T> requestQueue;
 	private Queue<R> responseQueue;
@@ -51,7 +51,7 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 	
 	private boolean closed;
 	
-	public MessagePipelineImpl(Server server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessor<T, R> messageProcessor, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
+	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessor<T, R> messageProcessor, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
 		this.server = server;
 		this.selectionKey = selectionKey;
 		this.requestParserFactory = requestParserFactory;
@@ -194,7 +194,7 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 		return closed;
 	}
 	@Override
-	public Server getServer() {
+	public NIOServer getServer() {
 		return server;
 	}
 

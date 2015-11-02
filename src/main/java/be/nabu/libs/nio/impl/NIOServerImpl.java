@@ -23,10 +23,10 @@ import org.slf4j.LoggerFactory;
 
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
-import be.nabu.libs.nio.api.Server;
+import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.utils.io.SSLServerMode;
 
-public class NIOServer implements Server {
+public class NIOServerImpl implements NIOServer {
 	
 	private static String CHANNEL_TYPE_CLIENT = "client";
     private static String CHANNEL_TYPE_SERVER = "server";
@@ -44,7 +44,7 @@ public class NIOServer implements Server {
 	private SSLServerMode sslServerMode;
 	private PipelineFactory pipelineFactory;
 	
-	public NIOServer(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory) {
+	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory) {
 		this.sslContext = sslContext;
 		this.sslServerMode = sslServerMode;
 		this.port = port;

@@ -18,7 +18,7 @@ public interface Pipeline extends Closeable {
 	/**
 	 * The server this pipeline belongs to
 	 */
-	public Server getServer();
+	public NIOServer getServer();
 	/**
 	 * Get the security context for this data pipeline 
 	 */
