@@ -1,5 +1,7 @@
 package be.nabu.libs.nio.impl;
 
+import be.nabu.libs.nio.api.MessageProcessor;
+
 
 public class RequestProcessor<T, R> implements Runnable {
 
@@ -18,7 +20,11 @@ public class RequestProcessor<T, R> implements Runnable {
 			}
 			R response;
 			try {
-				response = pipeline.getMessageProcessor().process(pipeline.getSecurityContext(), pipeline.getSourceContext(), request);
+				MessageProcessor<T, R> processor = pipeline.getMessageProcessorFactory().newProcessor(request);
+				if (processor == null) {
+					throw new IllegalArgumentException("There is no processor for the request");
+				}
+				response = processor.process(pipeline.getSecurityContext(), pipeline.getSourceContext(), request);
 			}
 			catch (Exception e) {
 				response = pipeline.getExceptionFormatter().format(request, e);

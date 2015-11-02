@@ -2,8 +2,8 @@ package be.nabu.libs.nio.api;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.text.ParseException;
 
-import be.nabu.libs.http.UnknownFrameException;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.PushbackContainer;
 
@@ -14,7 +14,7 @@ public interface MessageParser<T> extends Closeable {
 	/**
 	 * Push data to the framer
 	 */
-	public void push(PushbackContainer<ByteBuffer> content) throws UnknownFrameException, IOException;
+	public void push(PushbackContainer<ByteBuffer> content) throws ParseException, IOException;
 	/**
 	 * Check whether or not it is identified as a correct message
 	 */

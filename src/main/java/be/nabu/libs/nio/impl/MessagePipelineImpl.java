@@ -18,7 +18,7 @@ import be.nabu.libs.nio.api.KeepAliveDecider;
 import be.nabu.libs.nio.api.MessageFormatterFactory;
 import be.nabu.libs.nio.api.MessageParserFactory;
 import be.nabu.libs.nio.api.MessagePipeline;
-import be.nabu.libs.nio.api.MessageProcessor;
+import be.nabu.libs.nio.api.MessageProcessorFactory;
 import be.nabu.libs.nio.api.SecurityContext;
 import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.SourceContext;
@@ -45,18 +45,18 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 	private RequestProcessor<T, R> requestProcessor;
 	private MessageFormatterFactory<R> responseFormatterFactory;
 	private MessageParserFactory<T> requestParserFactory;
-	private MessageProcessor<T, R> messageProcessor;
+	private MessageProcessorFactory<T, R> messageProcessorFactory;
 	private KeepAliveDecider<R> keepAliveDecider;
 	private ExceptionFormatter<T, R> exceptionFormatter;
 	
 	private boolean closed;
 	
-	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessor<T, R> messageProcessor, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
+	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
 		this.server = server;
 		this.selectionKey = selectionKey;
 		this.requestParserFactory = requestParserFactory;
 		this.responseFormatterFactory = responseFormatterFactory;
-		this.messageProcessor = messageProcessor;
+		this.messageProcessorFactory = messageProcessorFactory;
 		this.keepAliveDecider = keepAliveDecider;
 		this.exceptionFormatter = exceptionFormatter;
 		this.requestQueue = new PipelineRequestQueue<T>(this);
@@ -181,8 +181,8 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 	public MessageParserFactory<T> getRequestParserFactory() {
 		return requestParserFactory;
 	}
-	public MessageProcessor<T, R> getMessageProcessor() {
-		return messageProcessor;
+	public MessageProcessorFactory<T, R> getMessageProcessorFactory() {
+		return messageProcessorFactory;
 	}
 	public KeepAliveDecider<R> getKeepAliveDecider() {
 		return keepAliveDecider;
