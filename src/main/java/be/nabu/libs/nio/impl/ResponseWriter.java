@@ -20,6 +20,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	private WritableContainer<ByteBuffer> output;
 	private MessagePipelineImpl<?, T> pipeline;
 	private ReadableContainer<ByteBuffer> readable;
+	private boolean keepAlive = true;
 	
 	ResponseWriter(MessagePipelineImpl<?, T> pipeline, WritableContainer<ByteBuffer> output) {
 		this.pipeline = pipeline;
@@ -51,6 +52,10 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 						if (!flush()) {
 							break;
 						}
+						else if (!keepAlive) {
+							close();
+							break;
+						}
 					}
 					catch (IOException e) {
 						logger.error("Could not flush response data", e);
@@ -58,7 +63,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 						break;
 					}
 					response = pipeline.getResponseQueue().poll();
-					boolean keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
+					keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
 					
 					MessageFormatter<T> messageFormatter = pipeline.getResponseFormatterFactory().newMessageFormatter();
 					try {
@@ -71,10 +76,6 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 							readable = messageFormatter.format(response);
 						}
 						keepAlive = false;
-					}
-					if (!keepAlive) {
-						close();
-						break;
 					}
 				}
 			}
