@@ -27,4 +27,8 @@ public interface Pipeline extends Closeable {
 	 * Return the context related to the source
 	 */
 	public SourceContext getSourceContext();
+	/**
+	 * The current state of the pipeline
+	 */
+	public PipelineState getState();
 }

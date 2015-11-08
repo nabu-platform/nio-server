@@ -19,16 +19,18 @@ import be.nabu.libs.nio.api.MessageFormatterFactory;
 import be.nabu.libs.nio.api.MessageParserFactory;
 import be.nabu.libs.nio.api.MessagePipeline;
 import be.nabu.libs.nio.api.MessageProcessorFactory;
+import be.nabu.libs.nio.api.PipelineState;
 import be.nabu.libs.nio.api.SecurityContext;
 import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.SourceContext;
+import be.nabu.libs.nio.api.UpgradeableMessagePipeline;
 import be.nabu.utils.io.SSLServerMode;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.Container;
 import be.nabu.utils.io.containers.bytes.SSLSocketByteContainer;
 import be.nabu.utils.io.containers.bytes.SocketByteContainer;
 
-public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
+public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R> {
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private Future<?> futureRead, futureWrite, futureProcess;
@@ -48,6 +50,12 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 	private MessageProcessorFactory<T, R> messageProcessorFactory;
 	private KeepAliveDecider<R> keepAliveDecider;
 	private ExceptionFormatter<T, R> exceptionFormatter;
+	
+	/**
+	 * It is possible that this pipeline replaced an existing pipeline (for example after a connection upgrade or a live protocol switch)
+	 * This is the parent pipeline that was handling the data before it was supplanted, it is mostly for allowing drainage
+	 */
+	private MessagePipelineImpl<?, ?> parentPipeline;
 	
 	private boolean closed;
 	
@@ -72,6 +80,23 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 		this.requestFramer = new RequestFramer<T>(this, container);
 		this.responseWriter = new ResponseWriter<R>(this, container);
 		this.requestProcessor = new RequestProcessor<T, R>(this); 
+	}
+	
+	private MessagePipelineImpl(MessagePipelineImpl<?, ?> parentPipeline, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) {
+		this.parentPipeline = parentPipeline;
+		this.server = parentPipeline.getServer();
+		this.selectionKey = parentPipeline.selectionKey;
+		this.responseFormatterFactory = responseFormatterFactory;
+		this.messageProcessorFactory = messageProcessorFactory;
+		this.keepAliveDecider = keepAliveDecider;
+		this.exceptionFormatter = exceptionFormatter;
+		this.requestQueue = new PipelineRequestQueue<T>(this);
+		this.responseQueue = new PipelineResponseQueue<R>(this);
+		this.channel = (SocketChannel) selectionKey.channel();
+		this.container = parentPipeline.container;
+		this.requestFramer = new RequestFramer<T>(this, container);
+		this.responseWriter = new ResponseWriter<R>(this, container);
+		this.requestProcessor = new RequestProcessor<T, R>(this);
 	}
 	
 	public void registerWriteInterest() {
@@ -206,6 +231,48 @@ public class MessagePipelineImpl<T, R> implements MessagePipeline<T, R> {
 				return getChannel().socket();
 			}
 		};
+	}
+
+	@Override
+	public PipelineState getState() {
+		// check if we have been explicitly closed
+		if (closed) {
+			return PipelineState.CLOSED;
+		}
+		// otherwise check if we are no longer actively registered on the server
+		else if (!server.getPipelines().contains(this)) {
+			// if we have no messages that are being processed, no messages left on the response queue and nothing left to be done by the response writer, we are closed
+			if ((futureProcess == null || futureProcess.isDone()) && responseQueue.isEmpty() && responseWriter.isDone()) {
+				closed = true;
+				return PipelineState.CLOSED;
+			}
+			else {
+				return PipelineState.DRAINING;
+			}
+		}
+		// if we have no data pending, we are waiting for more
+		else if (requestQueue.isEmpty() && responseQueue.isEmpty() && responseWriter.isDone()) {
+			return PipelineState.WAITING;
+		}
+		// we are processing stuff!
+		else {
+			return PipelineState.RUNNING;
+		}
+	}
+
+	@Override
+	public <Q, S> MessagePipeline<Q, S> upgrade(MessageParserFactory<Q> requestParserFactory, MessageFormatterFactory<S> responseFormatterFactory, MessageProcessorFactory<Q, S> messageProcessorFactory, KeepAliveDecider<S> keepAliveDecider, ExceptionFormatter<Q, S> exceptionFormatter) {
+		MessagePipelineImpl<Q, S> pipeline = new MessagePipelineImpl<Q, S>(this, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter);
+		server.upgrade(selectionKey, pipeline);
+		return pipeline;
+	}
+
+	MessagePipelineImpl<?, ?> getParentPipeline() {
+		return parentPipeline;
+	}
+
+	ResponseWriter<R> getResponseWriter() {
+		return responseWriter;
 	}
 	
 }

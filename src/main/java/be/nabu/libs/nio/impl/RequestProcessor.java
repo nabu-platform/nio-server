@@ -1,7 +1,7 @@
 package be.nabu.libs.nio.impl;
 
+import be.nabu.libs.nio.PipelineUtils;
 import be.nabu.libs.nio.api.MessageProcessor;
-
 
 public class RequestProcessor<T, R> implements Runnable {
 
@@ -13,6 +13,7 @@ public class RequestProcessor<T, R> implements Runnable {
 	
 	@Override
 	public void run() {
+		PipelineUtils.setPipelineForThread(pipeline);
 		while(!Thread.interrupted()) {
 			T request = pipeline.getRequestQueue().poll();
 			if (request == null) {
@@ -33,6 +34,7 @@ public class RequestProcessor<T, R> implements Runnable {
 				pipeline.getResponseQueue().add(response);
 			}
 		}
+		PipelineUtils.setPipelineForThread(null);
 	}
 
 }

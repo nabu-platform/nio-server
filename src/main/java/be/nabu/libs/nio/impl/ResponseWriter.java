@@ -32,6 +32,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 		if (readable != null) {
 			try {
 				readable.close();
+				readable = null;
 			}
 			catch (IOException e) {
 				logger.error("Unable to close readable", e);
@@ -45,41 +46,55 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 		MDC.put("socket", pipeline.getChannel().socket().toString());
 		if (pipeline.getChannel().isConnected() && !pipeline.isClosed()) {
 			while(!Thread.interrupted()) {
-				T response = null;
-				synchronized(output) {
-					try {
-						// still needs to be flushed, stop, it will be triggered again when write becomes available
-						if (!flush()) {
-							break;
-						}
-						else if (!keepAlive) {
-							close();
-							break;
-						}
-					}
-					catch (IOException e) {
-						logger.error("Could not flush response data", e);
-						close();
+				// first check if the pipeline has a parent that is draining
+				if (pipeline.getParentPipeline() != null && !pipeline.getParentPipeline().getResponseWriter().isDone()) {
+					if (!pipeline.getParentPipeline().getResponseWriter().write()) {
 						break;
 					}
-					response = pipeline.getResponseQueue().poll();
-					keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
-					
-					MessageFormatter<T> messageFormatter = pipeline.getResponseFormatterFactory().newMessageFormatter();
-					try {
-						readable = messageFormatter.format(response);
-					}
-					catch (Exception e) {
-						logger.error("Could not format response {}", e);
-						response = pipeline.getExceptionFormatter().format(null, e);
-						if (response != null) {
-							readable = messageFormatter.format(response);
-						}
-						keepAlive = false;
-					}
+				}
+				else if (!write()) {
+					break;
 				}
 			}
 		}
+	}
+
+	private boolean write() {
+		T response = null;
+		synchronized(output) {
+			try {
+				// still needs to be flushed, stop, it will be triggered again when write becomes available
+				if (!flush()) {
+					return false;
+				}
+				else if (!keepAlive) {
+					close();
+					return false;
+				}
+			}
+			catch (IOException e) {
+				logger.error("Could not flush response data", e);
+				close();
+				return false;
+			}
+			
+			response = pipeline.getResponseQueue().poll();
+			keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
+			
+			MessageFormatter<T> messageFormatter = pipeline.getResponseFormatterFactory().newMessageFormatter();
+			try {
+				readable = messageFormatter.format(response);
+			}
+			catch (Exception e) {
+				logger.error("Could not format response {}", e);
+				response = pipeline.getExceptionFormatter().format(null, e);
+				if (response != null) {
+					readable = messageFormatter.format(response);
+				}
+				keepAlive = false;
+			}
+		}
+		return true;
 	}
 	
 	private boolean flush() throws IOException {
@@ -134,4 +149,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 		}
 	}
 
+	public boolean isDone() {
+		return pipeline.getResponseQueue().isEmpty() && readable == null;
+	}
 }
