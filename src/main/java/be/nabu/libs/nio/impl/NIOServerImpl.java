@@ -3,11 +3,11 @@ package be.nabu.libs.nio.impl;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.channels.CancelledKeyException;
-import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -21,6 +21,7 @@ import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import be.nabu.libs.nio.api.ConnectionAcceptor;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
 import be.nabu.libs.nio.api.NIOServer;
@@ -35,7 +36,7 @@ public class NIOServerImpl implements NIOServer {
 	private ServerSocketChannel channel;
 	private int port;
 	private Selector selector;
-	private Map<Channel, Pipeline> channels = new HashMap<Channel, Pipeline>();
+	private Map<SocketChannel, Pipeline> channels = new HashMap<SocketChannel, Pipeline>();
 	private SSLContext sslContext;
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
@@ -43,6 +44,7 @@ public class NIOServerImpl implements NIOServer {
 	private ExecutorService ioExecutors, processExecutors;
 	private SSLServerMode sslServerMode;
 	private PipelineFactory pipelineFactory;
+	private ConnectionAcceptor connectionAcceptor;
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory) {
 		this.sslContext = sslContext;
@@ -111,30 +113,36 @@ public class NIOServerImpl implements NIOServer {
 		        			ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
 		        			SocketChannel clientSocketChannel = serverSocketChannel.accept();
 		        			if (clientSocketChannel != null) {
-		        				clientSocketChannel.configureBlocking(false);
-		        				
-		        				// initially we are only interested in available data from the remote user
-		        				SelectionKey clientKey = clientSocketChannel.register(selector, SelectionKey.OP_READ);
-		        				
-		        				// set a key we can detect
-		        				Map<String, String> clientproperties = new HashMap<String, String>();
-		                        clientproperties.put(CHANNEL_TYPE, CHANNEL_TYPE_CLIENT);
-		                        clientKey.attach(clientproperties);
-		                        
-		                        if (!channels.containsKey(clientSocketChannel)) {
-			                        synchronized(channels) {
-			                        	if (!channels.containsKey(clientSocketChannel)) {
-				                        	try {
-				                        		logger.debug("New connection: {}", clientSocketChannel);
-												channels.put(clientSocketChannel, pipelineFactory.newPipeline(this, clientKey));
+		        				if (connectionAcceptor != null && !connectionAcceptor.accept(this, clientSocketChannel)) {
+		        					logger.warn("Connection rejected: " + clientSocketChannel.socket());
+		        					clientSocketChannel.close();
+		        				}
+		        				else {
+			        				clientSocketChannel.configureBlocking(false);
+			        				
+			        				// initially we are only interested in available data from the remote user
+			        				SelectionKey clientKey = clientSocketChannel.register(selector, SelectionKey.OP_READ);
+			        				
+			        				// set a key we can detect
+			        				Map<String, String> clientproperties = new HashMap<String, String>();
+			                        clientproperties.put(CHANNEL_TYPE, CHANNEL_TYPE_CLIENT);
+			                        clientKey.attach(clientproperties);
+			                        
+			                        if (!channels.containsKey(clientSocketChannel)) {
+				                        synchronized(channels) {
+				                        	if (!channels.containsKey(clientSocketChannel)) {
+					                        	try {
+					                        		logger.debug("New connection: {}", clientSocketChannel);
+													channels.put(clientSocketChannel, pipelineFactory.newPipeline(this, clientKey));
+					                        	}
+					                        	catch (IOException e) {
+					                        		logger.error("Failed pipeline", e);
+					                        		clientSocketChannel.close();
+					                        	}
 				                        	}
-				                        	catch (IOException e) {
-				                        		logger.error("Failed pipeline", e);
-				                        		clientSocketChannel.close();
-				                        	}
-			                        	}
+				                        }
 			                        }
-		                        }
+		        				}
 		        			}
 		        		}
 		        		else {
@@ -238,5 +246,20 @@ public class NIOServerImpl implements NIOServer {
 	@Override
 	public PipelineFactory getPipelineFactory() {
 		return pipelineFactory;
+	}
+
+	@Override
+	public ConnectionAcceptor getConnectionAcceptor() {
+		return connectionAcceptor;
+	}
+
+	@Override
+	public void setConnectionAcceptor(ConnectionAcceptor connectionAcceptor) {
+		this.connectionAcceptor = connectionAcceptor;
+	}
+
+	@Override
+	public Collection<Pipeline> getPipelines() {
+		return channels.values();
 	}
 }

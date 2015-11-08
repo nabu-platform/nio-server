@@ -33,7 +33,7 @@ public class PipelineRequestQueue<T> extends ConcurrentLinkedQueue<T> {
 	@Override
 	public boolean addAll(Collection<? extends T> c) {
 		if (super.addAll(c)) {
-			pipeline.write();
+			pipeline.process();
 			return true;
 		}
 		return false;
