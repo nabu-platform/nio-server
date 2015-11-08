@@ -3,8 +3,6 @@ package be.nabu.libs.nio.impl;
 import java.io.Closeable;
 import java.io.IOException;
 
-import javax.net.ssl.SSLException;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +22,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 
 	private MessagePipelineImpl<T, ?> pipeline;
 
-	RequestFramer(MessagePipelineImpl<T, ?> pipeline, ReadableContainer<ByteBuffer> readable) throws SSLException {
+	RequestFramer(MessagePipelineImpl<T, ?> pipeline, ReadableContainer<ByteBuffer> readable) {
 		this.pipeline = pipeline;
 		this.readable = IOUtils.pushback(IOUtils.bufferReadable(readable, IOUtils.newByteBuffer(BUFFER_SIZE, true)));
 	}
