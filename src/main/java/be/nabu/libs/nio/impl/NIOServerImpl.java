@@ -265,9 +265,9 @@ public class NIOServerImpl implements NIOServer {
 
 	@Override
 	public void upgrade(SelectionKey key, Pipeline pipeline) {
-		if (channels.containsKey(key)) {
+		if (channels.containsKey(key.channel())) {
 			synchronized(channels) {
-				if (channels.containsKey(key)) {
+				if (channels.containsKey(key.channel())) {
 					channels.put((SocketChannel) key.channel(), pipeline);
 				}
 			}

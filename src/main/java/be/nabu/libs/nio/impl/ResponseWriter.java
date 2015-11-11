@@ -77,8 +77,12 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				close();
 				return false;
 			}
-			
 			response = pipeline.getResponseQueue().poll();
+			
+			// if no response, the queue is empty
+			if (response == null) {
+				return false;
+			}
 			keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
 			
 			MessageFormatter<T> messageFormatter = pipeline.getResponseFormatterFactory().newMessageFormatter();

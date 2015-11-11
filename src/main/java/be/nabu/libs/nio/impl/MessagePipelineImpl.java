@@ -86,6 +86,8 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.parentPipeline = parentPipeline;
 		this.server = parentPipeline.getServer();
 		this.selectionKey = parentPipeline.selectionKey;
+		this.container = parentPipeline.container;
+		this.requestParserFactory = requestParserFactory;
 		this.responseFormatterFactory = responseFormatterFactory;
 		this.messageProcessorFactory = messageProcessorFactory;
 		this.keepAliveDecider = keepAliveDecider;
@@ -93,7 +95,6 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.requestQueue = new PipelineRequestQueue<T>(this);
 		this.responseQueue = new PipelineResponseQueue<R>(this);
 		this.channel = (SocketChannel) selectionKey.channel();
-		this.container = parentPipeline.container;
 		this.requestFramer = new RequestFramer<T>(this, container);
 		this.responseWriter = new ResponseWriter<R>(this, container);
 		this.requestProcessor = new RequestProcessor<T, R>(this);

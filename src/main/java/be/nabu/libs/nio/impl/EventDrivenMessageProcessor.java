@@ -19,12 +19,14 @@ public class EventDrivenMessageProcessor<T, R> implements MessageProcessor<T, R>
 	private Class<T> requestClass;
 	private Class<R> responseClass;
 	private Logger logger = LoggerFactory.getLogger(getClass());
+	private boolean dispatchResponse;
 
-	public EventDrivenMessageProcessor(Class<T> requestClass, Class<R> responseClass, EventDispatcher dispatcher, ExceptionFormatter<T, R> exceptionFormatter) {
+	public EventDrivenMessageProcessor(Class<T> requestClass, Class<R> responseClass, EventDispatcher dispatcher, ExceptionFormatter<T, R> exceptionFormatter, boolean dispatchResponse) {
 		this.requestClass = requestClass;
 		this.responseClass = responseClass;
 		this.dispatcher = dispatcher;
 		this.exceptionFormatter = exceptionFormatter;
+		this.dispatchResponse = dispatchResponse;
 	}
 	
 	@Override
@@ -54,7 +56,7 @@ public class EventDrivenMessageProcessor<T, R> implements MessageProcessor<T, R>
 		});
 		logger.debug("Processed " + request.hashCode() + " in: " + (new Date().getTime() - timestamp.getTime()) + "ms");
 		// if there is a response, send it up the event dispatcher again for potential rewriting
-		if (response != null) {
+		if (response != null && dispatchResponse) {
 			timestamp = new Date();
 			// fire the response to allow others to alter it
 			R alteredResponse = dispatcher.fire(response, this, new ResponseHandler<R, R>() {
