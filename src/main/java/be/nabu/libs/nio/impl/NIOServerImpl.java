@@ -21,6 +21,7 @@ import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import be.nabu.libs.events.api.EventDispatcher;
 import be.nabu.libs.nio.api.ConnectionAcceptor;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
@@ -45,12 +46,14 @@ public class NIOServerImpl implements NIOServer {
 	private SSLServerMode sslServerMode;
 	private PipelineFactory pipelineFactory;
 	private ConnectionAcceptor connectionAcceptor;
+	private EventDispatcher dispatcher;
 	
-	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory) {
+	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher) {
 		this.sslContext = sslContext;
 		this.sslServerMode = sslServerMode;
 		this.port = port;
 		this.pipelineFactory = pipelineFactory;
+		this.dispatcher = dispatcher;
 		this.ioExecutors = Executors.newFixedThreadPool(ioPoolSize);
 		this.processExecutors = Executors.newFixedThreadPool(processPoolSize);
 	}
@@ -272,5 +275,10 @@ public class NIOServerImpl implements NIOServer {
 				}
 			}
 		}
+	}
+
+	@Override
+	public EventDispatcher getDispatcher() {
+		return dispatcher;
 	}
 }

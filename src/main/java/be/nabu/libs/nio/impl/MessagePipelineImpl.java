@@ -201,21 +201,31 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		return channel;
 	}
 
+	@Override
 	public MessageFormatterFactory<R> getResponseFormatterFactory() {
 		return responseFormatterFactory;
 	}
+	
+	@Override
 	public MessageParserFactory<T> getRequestParserFactory() {
 		return requestParserFactory;
 	}
+	
+	@Override
 	public MessageProcessorFactory<T, R> getMessageProcessorFactory() {
 		return messageProcessorFactory;
 	}
+	
+	@Override
 	public KeepAliveDecider<R> getKeepAliveDecider() {
 		return keepAliveDecider;
 	}
+	
+	@Override
 	public ExceptionFormatter<T, R> getExceptionFormatter() {
 		return exceptionFormatter;
 	}
+	
 	public boolean isClosed() {
 		return closed;
 	}

@@ -4,6 +4,7 @@ import java.io.IOException;
 
 import javax.net.ssl.SSLContext;
 
+import be.nabu.libs.events.api.EventDispatcher;
 import be.nabu.utils.io.SSLServerMode;
 
 public interface Server {
@@ -11,4 +12,5 @@ public interface Server {
 	public void stop();
 	public SSLContext getSSLContext();
 	public SSLServerMode getSSLServerMode();
+	public EventDispatcher getDispatcher();
 }
