@@ -6,6 +6,7 @@ public interface ConnectionEvent {
 	
 	public enum ConnectionState {
 		CONNECTED,
+		REJECTED,
 		CLOSED
 	}
 	
