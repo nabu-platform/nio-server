@@ -55,6 +55,9 @@ public class EventDrivenMessageProcessor<T, R> implements MessageProcessor<T, R>
 			}
 		});
 		logger.debug("Processed " + request.hashCode() + " in: " + (new Date().getTime() - timestamp.getTime()) + "ms");
+		if (response == null) {
+			response = getDefaultResponse(request);
+		}
 		// if there is a response, send it up the event dispatcher again for potential rewriting
 		if (response != null && dispatchResponse) {
 			timestamp = new Date();
@@ -78,6 +81,10 @@ public class EventDrivenMessageProcessor<T, R> implements MessageProcessor<T, R>
 			}
 		}
 		return response;
+	}
+	
+	protected R getDefaultResponse(T request) {
+		return null;
 	}
 
 	@Override
