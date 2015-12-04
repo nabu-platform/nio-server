@@ -2,6 +2,7 @@ package be.nabu.libs.nio.impl;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.StandardSocketOptions;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -91,6 +92,10 @@ public class NIOServerImpl implements NIOServer {
 		channel = ServerSocketChannel.open();
 		channel.bind(new InetSocketAddress(port));		// new InetSocketAddress("localhost", port)
 		channel.configureBlocking(false);
+		// http://www.unixguide.net/network/socketfaq/4.5.shtml
+		// after releasing the socket on close() it may remain open on the system
+		// this will allow us to quickly stop and restart the server, otherwise we run the risk that we get an "Address already in use" exception
+		channel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
 		
 		selector = Selector.open();
 		
@@ -136,19 +141,19 @@ public class NIOServerImpl implements NIOServer {
 			                        clientKey.attach(clientproperties);
 			                        
 			                        if (!channels.containsKey(clientSocketChannel)) {
-				                        synchronized(channels) {
-				                        	if (!channels.containsKey(clientSocketChannel)) {
-					                        	try {
+			                        	try {
+					                        synchronized(channels) {
+				                        		if (!channels.containsKey(clientSocketChannel)) {
 					                        		logger.debug("New connection: {}", clientSocketChannel);
 													channels.put(clientSocketChannel, pipelineFactory.newPipeline(this, clientKey));
 													dispatcher.fire(new ConnectionEventImpl(clientSocketChannel.socket(), ConnectionEvent.ConnectionState.CONNECTED), this);
 					                        	}
-					                        	catch (IOException e) {
-					                        		logger.error("Failed pipeline", e);
-					                        		clientSocketChannel.close();
-					                        	}
-				                        	}
-				                        }
+					                        }
+			                        	}
+			                        	catch (IOException e) {
+			                        		logger.error("Failed pipeline", e);
+			                        		clientSocketChannel.close();
+			                        	}
 			                        }
 		        				}
 		        			}
@@ -162,12 +167,11 @@ public class NIOServerImpl implements NIOServer {
 		        			else if (!clientChannel.isConnected() || !clientChannel.isOpen() || clientChannel.socket().isInputShutdown()) {
 		        				logger.warn("Disconnected, cancelling key for: {}", clientChannel.socket());
 		        				key.cancel();
-		        				if (channels.containsKey(clientChannel)) {
+		        				Pipeline pipeline = channels.get(clientChannel);
+		        				if (pipeline != null) {
+									pipeline.close();
 			        				synchronized(channels) {
-			        					if (channels.containsKey(clientChannel)) {
-				        					channels.get(clientChannel).close();
-				        					channels.remove(clientChannel);
-			        					}
+			        					channels.remove(clientChannel);
 			        				}
 		        				}
 		        			}
@@ -230,17 +234,16 @@ public class NIOServerImpl implements NIOServer {
 			selector.wakeup();
 		}		
 	}
-
-
+	
 	@Override
 	public void stop() {
 		if (channel != null) {
 			try {
 				channel.close();
+				for (Pipeline pipeline : channels.values()) {
+					pipeline.close();
+				}
 				synchronized(channels) {
-					for (Pipeline pipeline : channels.values()) {
-						pipeline.close();
-					}
 					channels.clear();
 				}
 				channel = null;

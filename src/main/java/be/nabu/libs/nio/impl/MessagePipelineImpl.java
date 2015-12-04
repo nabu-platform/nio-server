@@ -74,7 +74,6 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		// perform SSL if required
 		if (server.getSSLContext() != null) {
 			sslContainer = new SSLSocketByteContainer(container, server.getSSLContext(), server.getSSLServerMode());
-			sslContainer.shakeHands();
 			container = sslContainer;
 		}
 		this.requestFramer = new RequestFramer<T>(this, container);
