@@ -53,6 +53,10 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				pipeline.getRequestQueue().add(request);
 			}
 		}
+		catch (IOException e) {
+			closeConnection = true;
+			logger.warn("Could not process incoming data", e);
+		}
 		catch (Exception e) {
 			closeConnection = true;
 			logger.error("Could not process incoming data", e);
