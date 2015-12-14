@@ -1,15 +1,16 @@
 package be.nabu.libs.nio.api.events;
 
-import java.net.Socket;
+import be.nabu.libs.nio.api.Pipeline;
 
 public interface ConnectionEvent {
 	
 	public enum ConnectionState {
 		CONNECTED,
 		REJECTED,
-		CLOSED
+		CLOSED,
+		UPGRADED
 	}
 	
-	public Socket getSocket();
 	public ConnectionState getState();
+	public Pipeline getPipeline();
 }

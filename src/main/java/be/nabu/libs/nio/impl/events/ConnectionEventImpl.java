@@ -1,22 +1,16 @@
 package be.nabu.libs.nio.impl.events;
 
-import java.net.Socket;
-
+import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 
 public class ConnectionEventImpl implements ConnectionEvent {
 
-	private Socket socket;
 	private ConnectionState status;
+	private Pipeline pipeline;
 
-	public ConnectionEventImpl(Socket socket, ConnectionState status) {
-		this.socket = socket;
+	public ConnectionEventImpl(Pipeline pipeline, ConnectionState status) {
+		this.pipeline = pipeline;
 		this.status = status;
-	}
-	
-	@Override
-	public Socket getSocket() {
-		return socket;
 	}
 
 	@Override
@@ -24,4 +18,9 @@ public class ConnectionEventImpl implements ConnectionEvent {
 		return status;
 	}
 
+	@Override
+	public Pipeline getPipeline() {
+		return pipeline;
+	}
+	
 }

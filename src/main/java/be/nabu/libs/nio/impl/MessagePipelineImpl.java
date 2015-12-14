@@ -24,6 +24,8 @@ import be.nabu.libs.nio.api.SecurityContext;
 import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.SourceContext;
 import be.nabu.libs.nio.api.UpgradeableMessagePipeline;
+import be.nabu.libs.nio.api.events.ConnectionEvent;
+import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.utils.io.SSLServerMode;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.Container;
@@ -274,6 +276,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	public <Q, S> MessagePipeline<Q, S> upgrade(MessageParserFactory<Q> requestParserFactory, MessageFormatterFactory<S> responseFormatterFactory, MessageProcessorFactory<Q, S> messageProcessorFactory, KeepAliveDecider<S> keepAliveDecider, ExceptionFormatter<Q, S> exceptionFormatter) {
 		MessagePipelineImpl<Q, S> pipeline = new MessagePipelineImpl<Q, S>(this, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter);
 		server.upgrade(selectionKey, pipeline);
+		server.getDispatcher().fire(new ConnectionEventImpl(pipeline, ConnectionEvent.ConnectionState.UPGRADED), server);
 		return pipeline;
 	}
 
