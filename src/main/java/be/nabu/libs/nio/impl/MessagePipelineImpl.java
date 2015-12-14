@@ -276,7 +276,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	public <Q, S> MessagePipeline<Q, S> upgrade(MessageParserFactory<Q> requestParserFactory, MessageFormatterFactory<S> responseFormatterFactory, MessageProcessorFactory<Q, S> messageProcessorFactory, KeepAliveDecider<S> keepAliveDecider, ExceptionFormatter<Q, S> exceptionFormatter) {
 		MessagePipelineImpl<Q, S> pipeline = new MessagePipelineImpl<Q, S>(this, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter);
 		server.upgrade(selectionKey, pipeline);
-		server.getDispatcher().fire(new ConnectionEventImpl(pipeline, ConnectionEvent.ConnectionState.UPGRADED), server);
+		server.getDispatcher().fire(new ConnectionEventImpl(server, pipeline, ConnectionEvent.ConnectionState.UPGRADED), server);
 		return pipeline;
 	}
 

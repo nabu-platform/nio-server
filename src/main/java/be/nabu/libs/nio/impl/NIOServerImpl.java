@@ -70,7 +70,7 @@ public class NIOServerImpl implements NIOServer {
 	
 	@Override
 	public void close(SelectionKey selectionKey) {
-		dispatcher.fire(new ConnectionEventImpl(channels.get(selectionKey.channel()), ConnectionEvent.ConnectionState.CLOSED), this);
+		dispatcher.fire(new ConnectionEventImpl(this, channels.get(selectionKey.channel()), ConnectionEvent.ConnectionState.CLOSED), this);
 		if (channels.containsKey(selectionKey.channel())) {
 			synchronized(channels) {
 				channels.remove(selectionKey.channel());
@@ -126,7 +126,7 @@ public class NIOServerImpl implements NIOServer {
 		        			if (clientSocketChannel != null) {
 		        				if (connectionAcceptor != null && !connectionAcceptor.accept(this, clientSocketChannel)) {
 		        					logger.warn("Connection rejected: " + clientSocketChannel.socket());
-		        					dispatcher.fire(new ConnectionEventImpl(null, ConnectionEvent.ConnectionState.REJECTED), this);
+		        					dispatcher.fire(new ConnectionEventImpl(this, null, ConnectionEvent.ConnectionState.REJECTED), this);
 		        					clientSocketChannel.close();
 		        				}
 		        				else {
@@ -147,7 +147,7 @@ public class NIOServerImpl implements NIOServer {
 					                        		logger.debug("New connection: {}", clientSocketChannel);
 													Pipeline newPipeline = pipelineFactory.newPipeline(this, clientKey);
 													channels.put(clientSocketChannel, newPipeline);
-													dispatcher.fire(new ConnectionEventImpl(newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);
+													dispatcher.fire(new ConnectionEventImpl(this, newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);
 					                        	}
 					                        }
 			                        	}
