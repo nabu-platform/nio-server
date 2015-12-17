@@ -4,8 +4,13 @@ import java.io.Closeable;
 import java.util.Collection;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import be.nabu.libs.metrics.api.MetricInstance;
+
 public class PipelineRequestQueue<T> extends ConcurrentLinkedQueue<T> implements Closeable {
 
+	public static final String METRIC_TOTAL_REQUESTS = "totalRequests";
+	public static final String METRIC_USER_REQUESTS = "userRequests";
+	
 	private static final long serialVersionUID = 1L;
 	private MessagePipelineImpl<?, ?> pipeline;
 	private boolean closed;
@@ -20,6 +25,11 @@ public class PipelineRequestQueue<T> extends ConcurrentLinkedQueue<T> implements
 			throw new IllegalStateException("Can not add an item to this queue, it is closed");
 		}
 		if (super.add(e)) {
+			MetricInstance metrics = pipeline.getServer().getMetrics();
+			if (metrics != null) {
+				metrics.increment(METRIC_TOTAL_REQUESTS, 1);
+				metrics.increment(METRIC_USER_REQUESTS + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), 1);
+			}
 			pipeline.process();
 			return true;
 		}
@@ -32,6 +42,11 @@ public class PipelineRequestQueue<T> extends ConcurrentLinkedQueue<T> implements
 			throw new IllegalStateException("Can not add an item to this queue, it is closed");
 		}
 		if (super.offer(e)) {
+			MetricInstance metrics = pipeline.getServer().getMetrics();
+			if (metrics != null) {
+				metrics.increment(METRIC_TOTAL_REQUESTS, 1);
+				metrics.increment(METRIC_USER_REQUESTS + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), 1);
+			}
 			pipeline.process();
 			return true;
 		}
@@ -44,6 +59,11 @@ public class PipelineRequestQueue<T> extends ConcurrentLinkedQueue<T> implements
 			throw new IllegalStateException("Can not add an item to this queue, it is closed");
 		}
 		if (super.addAll(c)) {
+			MetricInstance metrics = pipeline.getServer().getMetrics();
+			if (metrics != null) {
+				metrics.increment(METRIC_TOTAL_REQUESTS, c.size());
+				metrics.increment(METRIC_USER_REQUESTS + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), c.size());
+			}
 			pipeline.process();
 			return true;
 		}

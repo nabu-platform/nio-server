@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 
+import be.nabu.libs.metrics.api.MetricInstance;
+import be.nabu.libs.metrics.api.MetricTimer;
 import be.nabu.libs.nio.api.MessageFormatter;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
@@ -15,12 +17,16 @@ import be.nabu.utils.io.api.WritableContainer;
 
 public class ResponseWriter<T> implements Closeable, Runnable {
 
+	public static final String TOTAL_PARSE_TIME = "totalFormatTime";
+	public static final String USER_PARSE_TIME = "userFormatTime";
+	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private ByteBuffer buffer = IOUtils.newByteBuffer(4096, true);
 	private WritableContainer<ByteBuffer> output;
 	private MessagePipelineImpl<?, T> pipeline;
 	private ReadableContainer<ByteBuffer> readable;
 	private boolean keepAlive = true;
+	private MetricTimer timer;
 	
 	ResponseWriter(MessagePipelineImpl<?, T> pipeline, WritableContainer<ByteBuffer> output) {
 		this.pipeline = pipeline;
@@ -67,9 +73,15 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				if (!flush()) {
 					return false;
 				}
-				else if (!keepAlive) {
-					close();
-					return false;
+				else {
+					if (timer != null) {
+						timer.getMetrics().log(USER_PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), timer.stop());
+						timer = null;
+					}
+					if (!keepAlive) {
+						close();
+						return false;
+					}
 				}
 			}
 			catch (IOException e) {
@@ -79,9 +91,13 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			}
 			response = pipeline.getResponseQueue().poll();
 			
+			MetricInstance metrics = pipeline.getServer().getMetrics();
 			// if no response, the queue is empty
 			if (response == null) {
 				return false;
+			}
+			else if (metrics != null) {
+				timer = metrics.start(TOTAL_PARSE_TIME);
 			}
 			keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
 			

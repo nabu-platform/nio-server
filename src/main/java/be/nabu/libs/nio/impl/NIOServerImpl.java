@@ -2,6 +2,7 @@ package be.nabu.libs.nio.impl;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.StandardSocketOptions;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectionKey;
@@ -23,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import be.nabu.libs.events.api.EventDispatcher;
+import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.nio.api.ConnectionAcceptor;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
@@ -33,6 +35,11 @@ import be.nabu.utils.io.SSLServerMode;
 
 public class NIOServerImpl implements NIOServer {
 	
+	public static String METRIC_TOTAL_CONNECTED = "totalConnected";
+	public static String METRIC_TOTAL_REJECTED = "totalRejected";
+	public static String METRIC_USER_CONNECTED = "userConnected";
+	public static String METRIC_USER_REJECTED = "userRejected";
+	
 	private static String CHANNEL_TYPE_CLIENT = "client";
     private static String CHANNEL_TYPE_SERVER = "server";
     private static String CHANNEL_TYPE = "channelType";
@@ -42,6 +49,7 @@ public class NIOServerImpl implements NIOServer {
 	private Selector selector;
 	private Map<SocketChannel, Pipeline> channels = new HashMap<SocketChannel, Pipeline>();
 	private SSLContext sslContext;
+	private MetricInstance metrics;
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	
@@ -87,6 +95,11 @@ public class NIOServerImpl implements NIOServer {
 		}
 	}
 	
+	public static String getUserId(Socket socket) {
+		InetSocketAddress remoteSocketAddress = ((InetSocketAddress) socket.getRemoteSocketAddress());
+		return remoteSocketAddress.getAddress().getHostAddress() + ":" + socket.getPort();
+	}
+	
 	@SuppressWarnings("unchecked")
 	public void start() throws IOException {
 		channel = ServerSocketChannel.open();
@@ -123,9 +136,14 @@ public class NIOServerImpl implements NIOServer {
 		        		if (CHANNEL_TYPE_SERVER.equals(((Map<String, String>) key.attachment()).get(CHANNEL_TYPE))) {
 		        			ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
 		        			SocketChannel clientSocketChannel = serverSocketChannel.accept();
+		        			MetricInstance metrics = this.metrics;
 		        			if (clientSocketChannel != null) {
 		        				if (connectionAcceptor != null && !connectionAcceptor.accept(this, clientSocketChannel)) {
 		        					logger.warn("Connection rejected: " + clientSocketChannel.socket());
+		        					if (metrics != null) {
+										metrics.increment(METRIC_TOTAL_REJECTED, 1l);
+										metrics.increment(METRIC_USER_REJECTED + ":" + getUserId(clientSocketChannel.socket()), 1l);
+									}
 		        					dispatcher.fire(new ConnectionEventImpl(this, null, ConnectionEvent.ConnectionState.REJECTED), this);
 		        					clientSocketChannel.close();
 		        				}
@@ -147,6 +165,10 @@ public class NIOServerImpl implements NIOServer {
 					                        		logger.debug("New connection: {}", clientSocketChannel);
 													Pipeline newPipeline = pipelineFactory.newPipeline(this, clientKey);
 													channels.put(clientSocketChannel, newPipeline);
+													if (metrics != null) {
+														metrics.increment(METRIC_TOTAL_CONNECTED, 1l);
+														metrics.increment(METRIC_USER_CONNECTED + ":" + getUserId(clientSocketChannel.socket()), 1l);
+													}
 													dispatcher.fire(new ConnectionEventImpl(this, newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);
 					                        	}
 					                        }
@@ -290,4 +312,15 @@ public class NIOServerImpl implements NIOServer {
 	public EventDispatcher getDispatcher() {
 		return dispatcher;
 	}
+
+	@Override
+	public MetricInstance getMetrics() {
+		return metrics;
+	}
+
+	@Override
+	public void setMetrics(MetricInstance metrics) {
+		this.metrics = metrics;
+	}
+	
 }
