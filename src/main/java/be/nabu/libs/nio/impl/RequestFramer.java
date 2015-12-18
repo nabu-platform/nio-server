@@ -50,6 +50,9 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				}
 			}
 			framer.push(readable);
+			if (framer.isClosed()) {
+				closeConnection = true;
+			}
 			if (framer.isDone()) {
 				if (timer != null) {
 					timer.getMetrics().increment(USER_PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), timer.stop());
@@ -57,9 +60,6 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				}
 				request = framer.getMessage();
 				framer = null;
-			}
-			if (framer.isClosed()) {
-				closeConnection = true;
 			}
 			if (request != null) {
 				logger.trace("Parsed request {}", request);
