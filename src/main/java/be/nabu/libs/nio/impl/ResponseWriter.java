@@ -2,6 +2,7 @@ package be.nabu.libs.nio.impl;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,15 +15,20 @@ import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.ReadableContainer;
 import be.nabu.utils.io.api.WritableContainer;
+import be.nabu.utils.io.containers.CountingWritableContainerImpl;
 
 public class ResponseWriter<T> implements Closeable, Runnable {
 
-	public static final String TOTAL_PARSE_TIME = "totalFormatTime";
-	public static final String USER_PARSE_TIME = "userFormatTime";
+	public static final String TOTAL_FORMAT_TIME = "totalFormatTime";
+	public static final String USER_FORMAT_TIME = "userFormatTime";
+	public static final String TOTAL_RESPONSE_SIZE = "totalResponseSize";
+	public static final String USER_RESPONSE_SIZE = "userResponseSize";
+	public static final String TOTAL_TRANSFER_RATE = "totalResponseTransferRate";
+	public static final String USER_TRANSFER_RATE = "userResponseTransferRate";
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private ByteBuffer buffer = IOUtils.newByteBuffer(4096, true);
-	private WritableContainer<ByteBuffer> output;
+	private CountingWritableContainerImpl<ByteBuffer> output;
 	private MessagePipelineImpl<?, T> pipeline;
 	private ReadableContainer<ByteBuffer> readable;
 	private boolean keepAlive = true;
@@ -30,7 +36,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	
 	ResponseWriter(MessagePipelineImpl<?, T> pipeline, WritableContainer<ByteBuffer> output) {
 		this.pipeline = pipeline;
-		this.output = output;
+		this.output = new CountingWritableContainerImpl<ByteBuffer>(output);
 	}
 	
 	@Override
@@ -75,7 +81,14 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				}
 				else {
 					if (timer != null) {
-						timer.getMetrics().log(USER_PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), timer.stop());
+						long timed = timer.stop();
+						String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket());
+						timer.getMetrics().log(USER_FORMAT_TIME + ":" + userId, timed);
+						timer.getMetrics().log(TOTAL_RESPONSE_SIZE, output.getWrittenTotal());
+						timer.getMetrics().log(USER_RESPONSE_SIZE + ":" + userId, output.getWrittenTotal());
+						long transferRate = output.getWrittenTotal() / timer.getTimeUnit().convert(timed, TimeUnit.SECONDS);
+						timer.getMetrics().log(TOTAL_TRANSFER_RATE, transferRate);
+						timer.getMetrics().log(USER_TRANSFER_RATE + ":" + userId, transferRate);
 						timer = null;
 					}
 					if (!keepAlive) {
@@ -97,8 +110,11 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				return false;
 			}
 			else if (metrics != null) {
-				timer = metrics.start(TOTAL_PARSE_TIME);
+				timer = metrics.start(TOTAL_FORMAT_TIME);
 			}
+			// reset written amount, even if not using metrics, we don't want it to overflow etc
+			output.setWrittenTotal(0);
+			
 			keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
 			
 			MessageFormatter<T> messageFormatter = pipeline.getResponseFormatterFactory().newMessageFormatter();

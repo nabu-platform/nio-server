@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.net.ssl.SSLContext;
 
@@ -24,21 +25,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import be.nabu.libs.events.api.EventDispatcher;
+import be.nabu.libs.metrics.api.MetricGauge;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.nio.api.ConnectionAcceptor;
+import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
-import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.utils.io.SSLServerMode;
 
 public class NIOServerImpl implements NIOServer {
 	
-	public static String METRIC_TOTAL_CONNECTED = "totalConnected";
-	public static String METRIC_TOTAL_REJECTED = "totalRejected";
-	public static String METRIC_USER_CONNECTED = "userConnected";
-	public static String METRIC_USER_REJECTED = "userRejected";
+	public static String METRIC_TOTAL_CONNECTIONS = "totalConnections";
+	public static String METRIC_TOTAL_REJECTIONS = "totalRejections";
+	public static String METRIC_USER_CONNECTIONS = "userConnections";
+	public static String METRIC_USER_REJECTIONS = "userRejections";
+	public static String METRIC_CURRENT_CONNECTIONS = "currentConnections";
+	public static String METRIC_ACTIVE_IO_THREADS = "activeIOThreads";
+	public static String METRIC_ACTIVE_PROCESS_THREADS = "activeProcessThreads";
+	public static String METRIC_IDLE_IO_THREADS = "idleIOThreads";
+	public static String METRIC_IDLE_PROCESS_THREADS = "idleProcessThreads";
 	
 	private static String CHANNEL_TYPE_CLIENT = "client";
     private static String CHANNEL_TYPE_SERVER = "server";
@@ -141,8 +148,8 @@ public class NIOServerImpl implements NIOServer {
 		        				if (connectionAcceptor != null && !connectionAcceptor.accept(this, clientSocketChannel)) {
 		        					logger.warn("Connection rejected: " + clientSocketChannel.socket());
 		        					if (metrics != null) {
-										metrics.increment(METRIC_TOTAL_REJECTED, 1l);
-										metrics.increment(METRIC_USER_REJECTED + ":" + getUserId(clientSocketChannel.socket()), 1l);
+										metrics.increment(METRIC_TOTAL_REJECTIONS, 1l);
+										metrics.increment(METRIC_USER_REJECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
 									}
 		        					dispatcher.fire(new ConnectionEventImpl(this, null, ConnectionEvent.ConnectionState.REJECTED), this);
 		        					clientSocketChannel.close();
@@ -166,8 +173,8 @@ public class NIOServerImpl implements NIOServer {
 													Pipeline newPipeline = pipelineFactory.newPipeline(this, clientKey);
 													channels.put(clientSocketChannel, newPipeline);
 													if (metrics != null) {
-														metrics.increment(METRIC_TOTAL_CONNECTED, 1l);
-														metrics.increment(METRIC_USER_CONNECTED + ":" + getUserId(clientSocketChannel.socket()), 1l);
+														metrics.increment(METRIC_TOTAL_CONNECTIONS, 1l);
+														metrics.increment(METRIC_USER_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
 													}
 													dispatcher.fire(new ConnectionEventImpl(this, newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);
 					                        	}
@@ -320,6 +327,42 @@ public class NIOServerImpl implements NIOServer {
 
 	@Override
 	public void setMetrics(MetricInstance metrics) {
+		if (metrics != null) {
+			metrics.set(METRIC_CURRENT_CONNECTIONS, new MetricGauge() {
+				@Override
+				public long getValue() {
+					return channels.size();
+				}
+			});
+			if (ioExecutors instanceof ThreadPoolExecutor) {
+				metrics.set(METRIC_ACTIVE_IO_THREADS, new MetricGauge() {
+					@Override
+					public long getValue() {
+						return ((ThreadPoolExecutor) ioExecutors).getActiveCount();
+					}
+				});
+				metrics.set(METRIC_IDLE_IO_THREADS, new MetricGauge() {
+					@Override
+					public long getValue() {
+						return ((ThreadPoolExecutor) ioExecutors).getMaximumPoolSize() - ((ThreadPoolExecutor) ioExecutors).getActiveCount();
+					}
+				});
+			}
+			if (processExecutors instanceof ThreadPoolExecutor) {
+				metrics.set(METRIC_ACTIVE_PROCESS_THREADS, new MetricGauge() {
+					@Override
+					public long getValue() {
+						return ((ThreadPoolExecutor) processExecutors).getActiveCount();
+					}
+				});
+				metrics.set(METRIC_IDLE_PROCESS_THREADS, new MetricGauge() {
+					@Override
+					public long getValue() {
+						return ((ThreadPoolExecutor) processExecutors).getMaximumPoolSize() - ((ThreadPoolExecutor) processExecutors).getActiveCount();
+					}
+				});
+			}
+		}
 		this.metrics = metrics;
 	}
 	

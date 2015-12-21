@@ -133,7 +133,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		if (futureProcess == null || futureProcess.isDone()) {
 			synchronized(this) {
 				if (futureProcess == null || futureProcess.isDone()) {
-					futureProcess = server.submitIOTask(requestProcessor);
+					futureProcess = server.submitProcessTask(requestProcessor);
 				}
 			}
 		}
