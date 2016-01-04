@@ -37,10 +37,8 @@ import be.nabu.utils.io.SSLServerMode;
 
 public class NIOServerImpl implements NIOServer {
 	
-	public static String METRIC_TOTAL_CONNECTIONS = "totalConnections";
-	public static String METRIC_TOTAL_REJECTIONS = "totalRejections";
-	public static String METRIC_USER_CONNECTIONS = "userConnections";
-	public static String METRIC_USER_REJECTIONS = "userRejections";
+	public static String METRIC_ACCEPTED_CONNECTIONS = "acceptedConnections";
+	public static String METRIC_REJECTED_CONNECTIONS = "rejectedConnections";
 	public static String METRIC_CURRENT_CONNECTIONS = "currentConnections";
 	public static String METRIC_ACTIVE_IO_THREADS = "activeIOThreads";
 	public static String METRIC_ACTIVE_PROCESS_THREADS = "activeProcessThreads";
@@ -148,8 +146,7 @@ public class NIOServerImpl implements NIOServer {
 		        				if (connectionAcceptor != null && !connectionAcceptor.accept(this, clientSocketChannel)) {
 		        					logger.warn("Connection rejected: " + clientSocketChannel.socket());
 		        					if (metrics != null) {
-										metrics.increment(METRIC_TOTAL_REJECTIONS, 1l);
-										metrics.increment(METRIC_USER_REJECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
+										metrics.increment(METRIC_REJECTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
 									}
 		        					dispatcher.fire(new ConnectionEventImpl(this, null, ConnectionEvent.ConnectionState.REJECTED), this);
 		        					clientSocketChannel.close();
@@ -173,8 +170,7 @@ public class NIOServerImpl implements NIOServer {
 													Pipeline newPipeline = pipelineFactory.newPipeline(this, clientKey);
 													channels.put(clientSocketChannel, newPipeline);
 													if (metrics != null) {
-														metrics.increment(METRIC_TOTAL_CONNECTIONS, 1l);
-														metrics.increment(METRIC_USER_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
+														metrics.increment(METRIC_ACCEPTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
 													}
 													dispatcher.fire(new ConnectionEventImpl(this, newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);
 					                        	}

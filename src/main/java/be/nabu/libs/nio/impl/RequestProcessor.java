@@ -7,8 +7,7 @@ import be.nabu.libs.nio.api.MessageProcessor;
 
 public class RequestProcessor<T, R> implements Runnable {
 
-	public static final String TOTAL_PROCESS_TIME = "totalProcessTime";
-	public static final String USER_PROCESS_TIME = "userProcessTime";
+	public static final String PROCESS_TIME = "processTime";
 	
 	private MessagePipelineImpl<T, R> pipeline;
 
@@ -33,11 +32,11 @@ public class RequestProcessor<T, R> implements Runnable {
 				MetricTimer timer = null;
 				MetricInstance metrics = pipeline.getServer().getMetrics();
 				if (metrics != null) {
-					timer = metrics.start(TOTAL_PROCESS_TIME);
+					timer = metrics.start(PROCESS_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()));
 				}
 				response = processor.process(pipeline.getSecurityContext(), pipeline.getSourceContext(), request);
 				if (timer != null) {
-					metrics.log(USER_PROCESS_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), timer.stop());
+					timer.stop();
 				}
 			}
 			catch (Exception e) {

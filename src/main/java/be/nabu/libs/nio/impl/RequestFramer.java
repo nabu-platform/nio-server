@@ -18,12 +18,9 @@ import be.nabu.utils.io.containers.PushbackContainerImpl;
 
 public class RequestFramer<T> implements Runnable, Closeable {
 
-	public static final String TOTAL_PARSE_TIME = "totalParseTime";
-	public static final String USER_PARSE_TIME = "userParseTime";
-	public static final String TOTAL_REQUEST_SIZE = "totalRequestSize";
-	public static final String USER_REQUEST_SIZE = "userRequestSize";
-	public static final String TOTAL_TRANSFER_RATE = "totalRequestTransferRate";
-	public static final String USER_TRANSFER_RATE = "userRequestTransferRate";
+	public static final String PARSE_TIME = "parseTime";
+	public static final String REQUEST_SIZE = "requestSize";
+	public static final String TRANSFER_RATE = "requestTransferRate";
 	
 	private static final int BUFFER_SIZE = 512000;
 	
@@ -56,7 +53,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				counting.setReadTotal(0);
 				MetricInstance metrics = pipeline.getServer().getMetrics();
 				if (metrics != null) {
-					timer = metrics.start(TOTAL_PARSE_TIME);
+					timer = metrics.start(PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()));
 				}
 			}
 			framer.push(readable);
@@ -67,13 +64,10 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				if (timer != null) {
 					long timed = timer.stop();
 					String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket());
-					timer.getMetrics().increment(USER_PARSE_TIME + ":" + userId, timed);
 					long readSize = counting.getReadTotal() - readable.getBufferSize();
-					timer.getMetrics().log(TOTAL_REQUEST_SIZE, readSize);
-					timer.getMetrics().log(USER_REQUEST_SIZE + ":" + userId, readSize);
-					long transferRate = readSize / timer.getTimeUnit().convert(timed, TimeUnit.SECONDS);
-					timer.getMetrics().log(TOTAL_TRANSFER_RATE, transferRate);
-					timer.getMetrics().log(USER_TRANSFER_RATE + ":" + userId, transferRate);
+					long transferRate = readSize / timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS);
+					timer.getMetrics().log(REQUEST_SIZE + ":" + userId, readSize);
+					timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
 					timer = null;
 				}
 				request = framer.getMessage();

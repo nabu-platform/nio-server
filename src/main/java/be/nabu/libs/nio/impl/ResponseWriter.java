@@ -19,12 +19,9 @@ import be.nabu.utils.io.containers.CountingWritableContainerImpl;
 
 public class ResponseWriter<T> implements Closeable, Runnable {
 
-	public static final String TOTAL_FORMAT_TIME = "totalFormatTime";
-	public static final String USER_FORMAT_TIME = "userFormatTime";
-	public static final String TOTAL_RESPONSE_SIZE = "totalResponseSize";
-	public static final String USER_RESPONSE_SIZE = "userResponseSize";
-	public static final String TOTAL_TRANSFER_RATE = "totalResponseTransferRate";
-	public static final String USER_TRANSFER_RATE = "userResponseTransferRate";
+	public static final String FORMAT_TIME = "formatTime";
+	public static final String RESPONSE_SIZE = "responseSize";
+	public static final String TRANSFER_RATE = "responseTransferRate";
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private ByteBuffer buffer = IOUtils.newByteBuffer(4096, true);
@@ -83,12 +80,9 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 					if (timer != null) {
 						long timed = timer.stop();
 						String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket());
-						timer.getMetrics().log(USER_FORMAT_TIME + ":" + userId, timed);
-						timer.getMetrics().log(TOTAL_RESPONSE_SIZE, output.getWrittenTotal());
-						timer.getMetrics().log(USER_RESPONSE_SIZE + ":" + userId, output.getWrittenTotal());
-						long transferRate = output.getWrittenTotal() / timer.getTimeUnit().convert(timed, TimeUnit.SECONDS);
-						timer.getMetrics().log(TOTAL_TRANSFER_RATE, transferRate);
-						timer.getMetrics().log(USER_TRANSFER_RATE + ":" + userId, transferRate);
+						timer.getMetrics().log(RESPONSE_SIZE + ":" + userId, output.getWrittenTotal());
+						long transferRate = output.getWrittenTotal() / timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS);
+						timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
 						timer = null;
 					}
 					if (!keepAlive) {
@@ -110,7 +104,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				return false;
 			}
 			else if (metrics != null) {
-				timer = metrics.start(TOTAL_FORMAT_TIME);
+				timer = metrics.start(FORMAT_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()));
 			}
 			// reset written amount, even if not using metrics, we don't want it to overflow etc
 			output.setWrittenTotal(0);
