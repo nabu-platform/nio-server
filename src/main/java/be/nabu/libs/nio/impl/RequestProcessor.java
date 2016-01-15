@@ -1,5 +1,7 @@
 package be.nabu.libs.nio.impl;
 
+import org.slf4j.MDC;
+
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
 import be.nabu.libs.nio.PipelineUtils;
@@ -17,6 +19,7 @@ public class RequestProcessor<T, R> implements Runnable {
 	
 	@Override
 	public void run() {
+		MDC.put("socket", pipeline.getChannel().socket().toString());
 		PipelineUtils.setPipelineForThread(pipeline);
 		while(!Thread.interrupted()) {
 			T request = pipeline.getRequestQueue().poll();

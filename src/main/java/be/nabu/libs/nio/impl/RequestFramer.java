@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
@@ -44,6 +45,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 
 	@Override
 	public void run() {
+		MDC.put("socket", pipeline.getChannel().socket().toString());
 		T request = null;
 		boolean closeConnection = false;
 		try {

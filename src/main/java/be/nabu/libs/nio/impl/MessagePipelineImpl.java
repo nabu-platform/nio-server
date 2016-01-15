@@ -152,22 +152,26 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	
 	@Override
 	public void close() {
-		closed = true;
 		try {
-			container.close();
+			closed = true;
+			try {
+				container.close();
+			}
+			catch (IOException e) {
+				logger.error("Failed to close the container", e);
+			}
+		
+			if (futureRead != null && !futureRead.isDone()) {
+				futureRead.cancel(true);
+			}
+			if (futureWrite != null && !futureWrite.isDone()) {
+				futureWrite.cancel(true);
+			}
 		}
-		catch (IOException e) {
-			logger.error("Failed to close the container", e);
+		finally {
+			// remove it from the server map
+			server.close(selectionKey);
 		}
-	
-		if (futureRead != null && !futureRead.isDone()) {
-			futureRead.cancel(true);
-		}
-		if (futureWrite != null && !futureWrite.isDone()) {
-			futureWrite.cancel(true);
-		}
-		// remove it from the server map
-		server.close(selectionKey);
 	}
 
 	@Override

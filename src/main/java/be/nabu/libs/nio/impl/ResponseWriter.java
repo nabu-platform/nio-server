@@ -43,7 +43,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				readable.close();
 				readable = null;
 			}
-			catch (IOException e) {
+			catch (Exception e) {
 				logger.error("Unable to close readable", e);
 			}
 		}

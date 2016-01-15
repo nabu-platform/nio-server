@@ -83,14 +83,18 @@ public class NIOServerImpl implements NIOServer {
 	
 	@Override
 	public void close(SelectionKey selectionKey) {
-		dispatcher.fire(new ConnectionEventImpl(this, channels.get(selectionKey.channel()), ConnectionEvent.ConnectionState.CLOSED), this);
-		if (channels.containsKey(selectionKey.channel())) {
-			synchronized(channels) {
-				channels.remove(selectionKey.channel());
+		try {
+			dispatcher.fire(new ConnectionEventImpl(this, channels.get(selectionKey.channel()), ConnectionEvent.ConnectionState.CLOSED), this);
+			if (selectionKey != null) {
+				selectionKey.cancel();
+			}
+			if (channels.containsKey(selectionKey.channel())) {
+				synchronized(channels) {
+					channels.remove(selectionKey.channel());
+				}
 			}
 		}
-		if (selectionKey != null) {
-			selectionKey.cancel();
+		finally {
 			try {
 				selectionKey.channel().close();
 			}
@@ -102,7 +106,7 @@ public class NIOServerImpl implements NIOServer {
 	
 	public static String getUserId(Socket socket) {
 		InetSocketAddress remoteSocketAddress = ((InetSocketAddress) socket.getRemoteSocketAddress());
-		return remoteSocketAddress.getAddress().getHostAddress() + ":" + socket.getPort();
+		return remoteSocketAddress == null ? "unknown:" + socket.getPort() : remoteSocketAddress.getAddress().getHostAddress() + ":" + socket.getPort();
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -188,17 +192,16 @@ public class NIOServerImpl implements NIOServer {
 		        			SocketChannel clientChannel = (SocketChannel) key.channel();
 		        			if (!channels.containsKey(clientChannel)) {
 		        				logger.warn("No channel, cancelling key for: {}", clientChannel.socket());
-		        				key.cancel();
+		        				close(key);
 		        			}
 		        			else if (!clientChannel.isConnected() || !clientChannel.isOpen() || clientChannel.socket().isInputShutdown()) {
 		        				logger.warn("Disconnected, cancelling key for: {}", clientChannel.socket());
-		        				key.cancel();
 		        				Pipeline pipeline = channels.get(clientChannel);
 		        				if (pipeline != null) {
 									pipeline.close();
-			        				synchronized(channels) {
-			        					channels.remove(clientChannel);
-			        				}
+		        				}
+		        				else {
+		        					close(key);
 		        				}
 		        			}
 		        			else {
@@ -222,12 +225,11 @@ public class NIOServerImpl implements NIOServer {
 	        		catch(CancelledKeyException e) {
 	        			Pipeline pipeline = channels.get(key.channel());
 	        			if (pipeline != null) {
-		        			synchronized(channels) {
-		        				channels.remove(key.channel());
-		        			}
 		        			pipeline.close();
 	        			}
-	        			key.channel().close();
+	        			else {
+	        				close(key);
+	        			}
 	        		}
         		}
         		catch (Exception e) {
@@ -267,7 +269,12 @@ public class NIOServerImpl implements NIOServer {
 			try {
 				channel.close();
 				for (Pipeline pipeline : channels.values()) {
-					pipeline.close();
+					try {
+						pipeline.close();
+					}
+					catch (Exception e) {
+						logger.error("Could not close pipeline", e);
+					}
 				}
 				synchronized(channels) {
 					channels.clear();
@@ -278,6 +285,11 @@ public class NIOServerImpl implements NIOServer {
 				logger.error("Failed to close server", e);
 			}
 		}
+	}
+	
+	@Override
+	protected void finalize() {
+		stop();
 	}
 
 	@Override
