@@ -92,7 +92,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				}
 			}
 			catch (IOException e) {
-				logger.error("Could not flush response data", e);
+				logger.warn("Could not flush response data", e);
 				close();
 				return false;
 			}
