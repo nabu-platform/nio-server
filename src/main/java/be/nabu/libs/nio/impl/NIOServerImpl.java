@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.net.ssl.SSLContext;
@@ -64,14 +65,14 @@ public class NIOServerImpl implements NIOServer {
 	private ConnectionAcceptor connectionAcceptor;
 	private EventDispatcher dispatcher;
 	
-	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher) {
+	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;
 		this.sslServerMode = sslServerMode;
 		this.port = port;
 		this.pipelineFactory = pipelineFactory;
 		this.dispatcher = dispatcher;
-		this.ioExecutors = Executors.newFixedThreadPool(ioPoolSize);
-		this.processExecutors = Executors.newFixedThreadPool(processPoolSize);
+		this.ioExecutors = Executors.newFixedThreadPool(ioPoolSize, threadFactory);
+		this.processExecutors = Executors.newFixedThreadPool(processPoolSize, threadFactory);
 	}
 	
 	public Future<?> submitIOTask(Runnable runnable) {
