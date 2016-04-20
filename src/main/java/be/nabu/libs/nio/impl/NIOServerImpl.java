@@ -12,9 +12,9 @@ import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -61,7 +61,7 @@ public class NIOServerImpl implements NIOServer {
 	private ServerSocketChannel channel;
 	private int port;
 	private Selector selector;
-	private Map<SocketChannel, Pipeline> channels = new LinkedHashMap<SocketChannel, Pipeline>();
+	private Map<SocketChannel, Pipeline> channels = new ConcurrentHashMap<SocketChannel, Pipeline>();
 	private SSLContext sslContext;
 	private MetricInstance metrics;
 	
