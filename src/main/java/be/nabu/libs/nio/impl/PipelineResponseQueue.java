@@ -23,6 +23,9 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 		if (closed) {
 			throw new IllegalStateException("Can not add an item to this queue, it is closed");
 		}
+		else if (pipeline.getResponseLimit() > 0 && size() >= pipeline.getResponseLimit()) {
+			throw new IllegalStateException("The response queue is full (" + size() + ")");
+		}
 		if (super.add(e)) {
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			if (metrics != null) {
@@ -39,6 +42,9 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 		if (closed) {
 			throw new IllegalStateException("Can not add an item to this queue, it is closed");
 		}
+		else if (pipeline.getResponseLimit() > 0 && size() >= pipeline.getResponseLimit()) {
+			throw new IllegalStateException("The response queue is full (" + size() + ")");
+		}
 		if (super.offer(e)) {
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			if (metrics != null) {
@@ -54,6 +60,9 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 	public boolean addAll(Collection<? extends T> c) {
 		if (closed) {
 			throw new IllegalStateException("Can not add an item to this queue, it is closed");
+		}
+		else if (pipeline.getResponseLimit() > 0 && size() >= pipeline.getResponseLimit()) {
+			throw new IllegalStateException("The response queue is full (" + size() + ")");
 		}
 		if (super.addAll(c)) {
 			MetricInstance metrics = pipeline.getServer().getMetrics();

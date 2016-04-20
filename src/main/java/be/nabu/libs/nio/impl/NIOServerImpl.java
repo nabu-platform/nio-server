@@ -37,6 +37,13 @@ import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.utils.io.SSLServerMode;
 
+/**
+ * TODO: 
+ * - track start of read (for a single request) with a timestamp, if read takes too long (especially in the synchronous part but also async) > kill connection
+ * - same for start of write + timeout
+ * - set limits on the size of the incoming/outgoing queues, not entirely sure if browsers have preconfigured limits on how many http requests they pipeline (https://en.wikipedia.org/wiki/HTTP_pipelining)
+ * 		for firefox this is configured in "network.http.pipelining.maxrequests" which defaults to 32 but "network.http.pipelining" is disabled by default?
+ */
 public class NIOServerImpl implements NIOServer {
 	
 	public static String METRIC_ACCEPTED_CONNECTIONS = "acceptedConnections";

@@ -5,6 +5,7 @@ import java.net.Socket;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.security.cert.Certificate;
+import java.util.Date;
 import java.util.Queue;
 import java.util.concurrent.Future;
 
@@ -34,6 +35,7 @@ import be.nabu.utils.io.containers.bytes.SocketByteContainer;
 
 public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R> {
 	
+	private Date created = new Date();
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private Future<?> futureRead, futureWrite, futureProcess;
 	private NIOServer server;
@@ -52,6 +54,8 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private MessageProcessorFactory<T, R> messageProcessorFactory;
 	private KeepAliveDecider<R> keepAliveDecider;
 	private ExceptionFormatter<T, R> exceptionFormatter;
+	private long readTimeout, writeTimeout;
+	private int requestLimit, responseLimit;
 	
 	/**
 	 * It is possible that this pipeline replaced an existing pipeline (for example after a connection upgrade or a live protocol switch)
@@ -246,6 +250,10 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			public Socket getSocket() {
 				return getChannel().socket();
 			}
+			@Override
+			public Date getCreated() {
+				return created;
+			}
 		};
 	}
 
@@ -290,6 +298,38 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 
 	ResponseWriter<R> getResponseWriter() {
 		return responseWriter;
+	}
+
+	@Override
+	public long getReadTimeout() {
+		return readTimeout;
+	}
+	public void setReadTimeout(long readTimeout) {
+		this.readTimeout = readTimeout;
+	}
+
+	@Override
+	public long getWriteTimeout() {
+		return writeTimeout;
+	}
+	public void setWriteTimeout(long writeTimeout) {
+		this.writeTimeout = writeTimeout;
+	}
+
+	@Override
+	public int getRequestLimit() {
+		return requestLimit;
+	}
+	public void setRequestLimit(int requestLimit) {
+		this.requestLimit = requestLimit;
+	}
+
+	@Override
+	public int getResponseLimit() {
+		return responseLimit;
+	}
+	public void setResponseLimit(int responseLimit) {
+		this.responseLimit = responseLimit;
 	}
 	
 }

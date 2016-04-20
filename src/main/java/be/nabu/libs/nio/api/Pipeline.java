@@ -31,4 +31,14 @@ public interface Pipeline extends Closeable {
 	 * The current state of the pipeline
 	 */
 	public PipelineState getState();
+	/**
+	 * If a request takes too long to come in, we want to time out the connection to prevent slow write "attacks" taking up resources
+	 * If set to 0 the timeout is infinite
+	 */
+	public long getReadTimeout();
+	/**
+	 * If a response takes too long to write to the target, we want to time out the connection to prevent slow read "attacks" from taking up resources
+	 * If set to 0 the timeout is infinite
+	 */
+	public long getWriteTimeout();
 }

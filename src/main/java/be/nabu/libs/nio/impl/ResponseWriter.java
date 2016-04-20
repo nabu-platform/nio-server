@@ -2,6 +2,7 @@ package be.nabu.libs.nio.impl;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -30,6 +31,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	private ReadableContainer<ByteBuffer> readable;
 	private boolean keepAlive = true;
 	private MetricTimer timer;
+	private Date started;
 	
 	ResponseWriter(MessagePipelineImpl<?, T> pipeline, WritableContainer<ByteBuffer> output) {
 		this.pipeline = pipeline;
@@ -109,6 +111,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			// reset written amount, even if not using metrics, we don't want it to overflow etc
 			output.setWrittenTotal(0);
 			
+			started = new Date();
 			keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
 			
 			MessageFormatter<T> messageFormatter = pipeline.getResponseFormatterFactory().newMessageFormatter();
@@ -159,13 +162,20 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			}
 			// still data in the buffer or the origin, add an interest in write ops so we can complete this write
 			if (buffer.remainingData() > 0 || readable != null) {
-				logger.debug("Not all response content could be written, rescheduling the writer for: {}", pipeline);
-				// make sure we can reschedule it and no one can reschedule while we toggle the boolean
-				pipeline.registerWriteInterest();
+				if (started != null && pipeline.getWriteTimeout() > 0 && started.getTime() < new Date().getTime() - pipeline.getWriteTimeout()) {
+					logger.warn("Write timed out, started at {} with a timeout value of {}", started, pipeline.getWriteTimeout());
+					pipeline.close();
+				}
+				else {
+					logger.debug("Not all response content could be written, rescheduling the writer for: {}", pipeline);
+					// make sure we can reschedule it and no one can reschedule while we toggle the boolean
+					pipeline.registerWriteInterest();
+				}
 				return false;
 			}
 			// deregister interest in write ops otherwise it will cycle endlessly (it is almost always writable)
 			else {
+				started = null;
 				logger.trace("All response data written, removing write interest for: {}", pipeline);
 				pipeline.unregisterWriteInterest();
 				output.flush();

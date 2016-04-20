@@ -2,6 +2,7 @@ package be.nabu.libs.nio.impl;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -31,6 +32,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	private MessageParser<T> framer;
 	private MessagePipelineImpl<T, ?> pipeline;
 	private MetricTimer timer;
+	private Date started;
 
 	RequestFramer(MessagePipelineImpl<T, ?> pipeline, ReadableContainer<ByteBuffer> readable) {
 		this.pipeline = pipeline;
@@ -51,6 +53,8 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		try {
 			if (framer == null) {
 				framer = pipeline.getRequestParserFactory().newMessageParser();
+				// mark when we started reading for timeout purposes
+				started = new Date();
 				// regardless of metrics, reset the counter
 				counting.setReadTotal(0);
 				MetricInstance metrics = pipeline.getServer().getMetrics();
@@ -71,9 +75,14 @@ public class RequestFramer<T> implements Runnable, Closeable {
 					timer.getMetrics().log(REQUEST_SIZE + ":" + userId, readSize);
 					timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
 					timer = null;
+					started = null;
 				}
 				request = framer.getMessage();
 				framer = null;
+			}
+			else if (started != null && pipeline.getReadTimeout() > 0 && started.getTime() < new Date().getTime() - pipeline.getReadTimeout()) {
+				logger.warn("Read timed out, started at {} with a timeout value of {}", started, pipeline.getReadTimeout());
+				pipeline.close();
 			}
 			if (request != null) {
 				logger.trace("Parsed request {}", request);
