@@ -94,7 +94,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				}
 			}
 			catch (IOException e) {
-				logger.warn("Could not flush response data", e);
+				logger.debug("Could not flush response data", e);
 				close();
 				return false;
 			}
@@ -154,7 +154,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 							readable.close();
 						}
 						catch (Exception e) {
-							logger.warn("Could not close readable", e);
+							logger.debug("Could not close readable", e);
 						}
 						readable = null;
 					}
@@ -183,7 +183,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			}
 		}
 		else {
-			logger.warn("Skipping flush (closed: " + pipeline.isClosed() + ", connected: " + pipeline.getChannel().isConnected() + ", output shutdown: " + pipeline.getChannel().socket().isOutputShutdown() + ")");
+			logger.debug("Skipping flush (closed: " + pipeline.isClosed() + ", connected: " + pipeline.getChannel().isConnected() + ", output shutdown: " + pipeline.getChannel().socket().isOutputShutdown() + ")");
 			close();
 			return false;
 		}

@@ -91,7 +91,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		}
 		catch (IOException e) {
 			closeConnection = true;
-			logger.warn("Could not process incoming data", e);
+			logger.debug("Could not process incoming data", e);
 		}
 		catch (Exception e) {
 			closeConnection = true;

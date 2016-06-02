@@ -162,7 +162,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 				container.close();
 			}
 			catch (IOException e) {
-				logger.warn("Failed to close the container", e);
+				logger.debug("Failed to close the container", e);
 			}
 		
 			if (futureRead != null && !futureRead.isDone()) {
