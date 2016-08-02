@@ -10,9 +10,11 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -72,6 +74,8 @@ public class NIOServerImpl implements NIOServer {
 	private PipelineFactory pipelineFactory;
 	private ConnectionAcceptor connectionAcceptor;
 	private EventDispatcher dispatcher;
+	
+	private Long maxIdleTime, maxLifeTime;
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;
@@ -248,7 +252,37 @@ public class NIOServerImpl implements NIOServer {
         			iterator.remove();
         		}
         	}
+        	pruneConnections();
         }
+	}
+	
+	private void pruneConnections() {
+		synchronized(channels) {
+			Iterator<Entry<SocketChannel, Pipeline>> iterator = channels.entrySet().iterator();
+			while (iterator.hasNext()) {
+				Entry<SocketChannel, Pipeline> next = iterator.next();
+				Date lastActivity = next.getValue().getLastRead();
+				if (next.getValue().getLastWritten() != null && (lastActivity == null || lastActivity.after(next.getValue().getLastWritten()))) {
+					lastActivity = next.getValue().getLastWritten();
+				}
+				Date now = new Date();
+				// the connection is gone
+				if (!next.getKey().isConnected()
+					// the connection has exceeded its max lifetime
+					|| (maxLifeTime != null && now.getTime() - next.getValue().getSourceContext().getCreated().getTime() > maxLifeTime)
+					// the connection has exceeded its max idletime
+					|| (maxIdleTime != null && lastActivity != null && now.getTime() - lastActivity.getTime() > maxIdleTime)) {
+					logger.warn("Pruning connection " + next.getKey() + ": [connected:" + next.getKey().isConnected() + "], [created:" + next.getValue().getSourceContext().getCreated() + "/" + maxLifeTime + "], [lastActivity:" + lastActivity + "/" + maxIdleTime + "]");
+					try {
+						next.getKey().close();
+					}
+					catch (IOException e) {
+						logger.warn("Can not close connection", e);
+					}
+					iterator.remove();
+				}
+			}
+		}
 	}
 
 	public SSLContext getSSLContext() {
@@ -381,6 +415,22 @@ public class NIOServerImpl implements NIOServer {
 			}
 		}
 		this.metrics = metrics;
+	}
+
+	public Long getMaxIdleTime() {
+		return maxIdleTime;
+	}
+
+	public void setMaxIdleTime(Long maxIdleTime) {
+		this.maxIdleTime = maxIdleTime;
+	}
+
+	public Long getMaxLifeTime() {
+		return maxLifeTime;
+	}
+
+	public void setMaxLifeTime(Long maxLifeTime) {
+		this.maxLifeTime = maxLifeTime;
 	}
 	
 }

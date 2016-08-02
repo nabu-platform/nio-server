@@ -36,6 +36,7 @@ import be.nabu.utils.io.containers.bytes.SocketByteContainer;
 public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R> {
 	
 	private Date created = new Date();
+	private Date lastRead, lastWritten, lastProcessed;
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private Future<?> futureRead, futureWrite, futureProcess;
 	private NIOServer server;
@@ -114,6 +115,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	}
 	
 	public void read() {
+		lastRead = new Date();
 		if (futureRead == null || futureRead.isDone()) {
 			synchronized(this) {
 				if (futureRead == null || futureRead.isDone()) {
@@ -124,6 +126,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	}
 	
 	public void write() {
+		lastWritten = new Date();
 		if (futureWrite == null || futureWrite.isDone()) {
 			synchronized(this) {
 				if (futureWrite == null || futureWrite.isDone()) {
@@ -134,6 +137,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	}
 	
 	public void process() {
+		lastProcessed = new Date();
 		if (futureProcess == null || futureProcess.isDone()) {
 			synchronized(this) {
 				if (futureProcess == null || futureProcess.isDone()) {
@@ -331,5 +335,14 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	public void setResponseLimit(int responseLimit) {
 		this.responseLimit = responseLimit;
 	}
-	
+
+	public Date getLastRead() {
+		return lastRead;
+	}
+	public Date getLastWritten() {
+		return lastWritten;
+	}
+	public Date getLastProcessed() {
+		return lastProcessed;
+	}
 }

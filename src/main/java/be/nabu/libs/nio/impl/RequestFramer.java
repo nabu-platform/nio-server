@@ -24,7 +24,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	public static final String REQUEST_SIZE = "requestSize";
 	public static final String TRANSFER_RATE = "requestTransferRate";
 	
-	private static final int BUFFER_SIZE = 512000;
+	private static final int BUFFER_SIZE = 16384;
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private PushbackContainerImpl<ByteBuffer> readable;
