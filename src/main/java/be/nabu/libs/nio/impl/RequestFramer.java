@@ -7,7 +7,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
@@ -47,7 +46,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 
 	@Override
 	public void run() {
-		MDC.put("socket", pipeline.getChannel().socket().toString());
+		pipeline.putMDCContext();
 		T request = null;
 		boolean closeConnection = false;
 		try {
@@ -59,7 +58,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				counting.setReadTotal(0);
 				MetricInstance metrics = pipeline.getServer().getMetrics();
 				if (metrics != null) {
-					timer = metrics.start(PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()));
+					timer = metrics.start(PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()));
 				}
 			}
 			framer.push(readable);
@@ -69,7 +68,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 			if (framer.isDone()) {
 				if (timer != null) {
 					long timed = timer.stop();
-					String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket());
+					String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress());
 					long readSize = counting.getReadTotal() - readable.getBufferSize();
 					long transferRate = readSize / Math.max(1, timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS));
 					timer.getMetrics().log(REQUEST_SIZE + ":" + userId, readSize);
@@ -105,6 +104,12 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				logger.error("Failed to close connection", e);
 			}
 		}
+		else if (pipeline.rescheduleRead()) {
+			pipeline.read(true);
+		}
 	}
 
+	public long remainingData() {
+		return readable.getBufferSize();
+	}
 }

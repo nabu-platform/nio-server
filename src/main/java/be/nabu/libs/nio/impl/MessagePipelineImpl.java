@@ -1,7 +1,8 @@
 package be.nabu.libs.nio.impl;
 
 import java.io.IOException;
-import java.net.Socket;
+import java.net.SocketAddress;
+import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.security.cert.Certificate;
@@ -13,6 +14,7 @@ import javax.net.ssl.SSLContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import be.nabu.libs.nio.api.ExceptionFormatter;
 import be.nabu.libs.nio.api.KeepAliveDecider;
@@ -27,9 +29,11 @@ import be.nabu.libs.nio.api.SourceContext;
 import be.nabu.libs.nio.api.UpgradeableMessagePipeline;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
+import be.nabu.libs.nio.impl.udp.UDPChannel;
 import be.nabu.utils.io.SSLServerMode;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.Container;
+import be.nabu.utils.io.containers.bytes.ByteChannelContainer;
 import be.nabu.utils.io.containers.bytes.SSLSocketByteContainer;
 import be.nabu.utils.io.containers.bytes.SocketByteContainer;
 
@@ -43,7 +47,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private SelectionKey selectionKey;
 	private Queue<T> requestQueue;
 	private Queue<R> responseQueue;
-	private SocketChannel channel;
+	private Channel channel;
 	private SSLSocketByteContainer sslContainer;
 	private Container<ByteBuffer> container;
 	
@@ -76,8 +80,8 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.exceptionFormatter = exceptionFormatter;
 		this.requestQueue = new PipelineRequestQueue<T>(this);
 		this.responseQueue = new PipelineResponseQueue<R>(this);
-		this.channel = (SocketChannel) selectionKey.channel();
-		this.container = new SocketByteContainer(channel);
+		this.channel = selectionKey.channel();
+		this.container = this.channel instanceof SocketChannel ? new SocketByteContainer((SocketChannel) channel) : new ByteChannelContainer<UDPChannel>((UDPChannel) this.channel);
 		// perform SSL if required
 		if (server.getSSLContext() != null) {
 			sslContainer = new SSLSocketByteContainer(container, server.getSSLContext(), server.getSSLServerMode());
@@ -100,7 +104,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.exceptionFormatter = exceptionFormatter;
 		this.requestQueue = new PipelineRequestQueue<T>(this);
 		this.responseQueue = new PipelineResponseQueue<R>(this);
-		this.channel = (SocketChannel) selectionKey.channel();
+		this.channel = selectionKey.channel();
 		this.requestFramer = new RequestFramer<T>(this, container);
 		this.responseWriter = new ResponseWriter<R>(this, container);
 		this.requestProcessor = new RequestProcessor<T, R>(this);
@@ -115,10 +119,14 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	}
 	
 	public void read() {
+		read(false);
+	}
+
+	void read(boolean force) {
 		lastRead = new Date();
-		if (futureRead == null || futureRead.isDone()) {
+		if (force || futureRead == null || futureRead.isDone()) {
 			synchronized(this) {
-				if (futureRead == null || futureRead.isDone()) {
+				if (force || futureRead == null || futureRead.isDone()) {
 					futureRead = server.submitIOTask(requestFramer);
 				}
 			}
@@ -147,6 +155,13 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		}
 	}
 
+	/**
+	 * Tiny hack to reschedule reading of the request framer for udp messages
+	 */
+	boolean rescheduleRead() {
+		return getChannel() instanceof UDPChannel && (((UDPChannel) getChannel()).hasPending() || requestFramer.remainingData() > 0);
+	}
+	
 	/**
 	 * If you simply "close" the channel only the input and output processing stops, not the message processing
 	 * This method also stops the message processing
@@ -210,7 +225,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		return responseQueue;
 	}
 
-	SocketChannel getChannel() {
+	Channel getChannel() {
 		return channel;
 	}
 
@@ -251,14 +266,38 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	public SourceContext getSourceContext() {
 		return new SourceContext() {
 			@Override
-			public Socket getSocket() {
-				return getChannel().socket();
+			public SocketAddress getSocketAddress() {
+				if (getChannel() instanceof SocketChannel) {
+					return ((SocketChannel) getChannel()).socket().getRemoteSocketAddress();
+				}
+				else if (getChannel() instanceof UDPChannel) {
+					return ((UDPChannel) getChannel()).getTarget();
+				}
+				else {
+					throw new UnsupportedOperationException();
+				}
 			}
 			@Override
 			public Date getCreated() {
 				return created;
 			}
+			@Override
+			public int getLocalPort() {
+				if (getChannel() instanceof SocketChannel) {
+					return ((SocketChannel) getChannel()).socket().getLocalPort();
+				}
+				else if (getChannel() instanceof UDPChannel) {
+					return ((UDPChannel) getChannel()).getServer().getPort();
+				}
+				else {
+					throw new UnsupportedOperationException();
+				}
+			}
 		};
+	}
+	
+	void putMDCContext() {
+		MDC.put("socket", getChannel() instanceof SocketChannel ? ((SocketChannel) getChannel()).socket().toString() : ((UDPChannel) getChannel()).getTarget().toString());
 	}
 
 	@Override

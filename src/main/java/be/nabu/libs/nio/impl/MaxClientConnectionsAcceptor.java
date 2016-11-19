@@ -1,6 +1,7 @@
 package be.nabu.libs.nio.impl;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.nio.channels.SocketChannel;
 
 import be.nabu.libs.nio.api.ConnectionAcceptor;
@@ -23,7 +24,7 @@ public class MaxClientConnectionsAcceptor implements ConnectionAcceptor {
 			return false;
 		}
 		for (Pipeline pipeline : server.getPipelines()) {
-			if (pipeline.getSourceContext().getSocket().getInetAddress() != null && pipeline.getSourceContext().getSocket().getInetAddress().getHostAddress().equals(inetAddress.getHostAddress())) {
+			if (pipeline.getSourceContext().getSocketAddress() != null && ((InetSocketAddress) pipeline.getSourceContext().getSocketAddress()).getAddress().getHostAddress().equals(inetAddress.getHostAddress())) {
 				current++;
 			}
 		}

@@ -1,9 +1,10 @@
 package be.nabu.libs.nio.api;
 
-import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.Date;
 
 public interface SourceContext {
-	public Socket getSocket();
+	public SocketAddress getSocketAddress();
+	public int getLocalPort();
 	public Date getCreated();
 }

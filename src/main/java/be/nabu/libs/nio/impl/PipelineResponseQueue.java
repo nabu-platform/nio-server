@@ -29,7 +29,7 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 		if (super.add(e)) {
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			if (metrics != null) {
-				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), 1);
+				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()), 1);
 			}
 			pipeline.write();
 			return true;
@@ -48,7 +48,7 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 		if (super.offer(e)) {
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			if (metrics != null) {
-				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), 1);
+				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()), 1);
 			}
 			pipeline.write();
 			return true;
@@ -67,7 +67,7 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 		if (super.addAll(c)) {
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			if (metrics != null) {
-				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()), c.size());
+				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()), c.size());
 			}
 			pipeline.write();
 			return true;

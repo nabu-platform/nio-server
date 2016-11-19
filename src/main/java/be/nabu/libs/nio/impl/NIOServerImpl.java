@@ -2,7 +2,7 @@ package be.nabu.libs.nio.impl;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.StandardSocketOptions;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectionKey;
@@ -87,9 +87,12 @@ public class NIOServerImpl implements NIOServer {
 		this.processExecutors = Executors.newFixedThreadPool(processPoolSize, threadFactory);
 	}
 	
+	@Override
 	public Future<?> submitIOTask(Runnable runnable) {
 		return ioExecutors.submit(runnable);
 	}
+	
+	@Override
 	public Future<?> submitProcessTask(Runnable runnable) {
 		return processExecutors.submit(runnable);
 	}
@@ -117,9 +120,9 @@ public class NIOServerImpl implements NIOServer {
 		}
 	}
 	
-	public static String getUserId(Socket socket) {
-		InetSocketAddress remoteSocketAddress = ((InetSocketAddress) socket.getRemoteSocketAddress());
-		return remoteSocketAddress == null ? "unknown:" + socket.getPort() : remoteSocketAddress.getAddress().getHostAddress() + ":" + socket.getPort();
+	public static String getUserId(SocketAddress address) {
+		InetSocketAddress remoteSocketAddress = ((InetSocketAddress) address);
+		return remoteSocketAddress == null ? "unknown" : remoteSocketAddress.getAddress().getHostAddress() + ":" + remoteSocketAddress.getPort();
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -163,7 +166,7 @@ public class NIOServerImpl implements NIOServer {
 		        				if (connectionAcceptor != null && !connectionAcceptor.accept(this, clientSocketChannel)) {
 		        					logger.warn("Connection rejected: " + clientSocketChannel.socket());
 		        					if (metrics != null) {
-										metrics.increment(METRIC_REJECTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
+										metrics.increment(METRIC_REJECTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket().getRemoteSocketAddress()), 1l);
 									}
 		        					dispatcher.fire(new ConnectionEventImpl(this, null, ConnectionEvent.ConnectionState.REJECTED), this);
 		        					clientSocketChannel.close();
@@ -187,7 +190,7 @@ public class NIOServerImpl implements NIOServer {
 													Pipeline newPipeline = pipelineFactory.newPipeline(this, clientKey);
 													channels.put(clientSocketChannel, newPipeline);
 													if (metrics != null) {
-														metrics.increment(METRIC_ACCEPTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket()), 1l);
+														metrics.increment(METRIC_ACCEPTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket().getRemoteSocketAddress()), 1l);
 													}
 													dispatcher.fire(new ConnectionEventImpl(this, newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);
 					                        	}

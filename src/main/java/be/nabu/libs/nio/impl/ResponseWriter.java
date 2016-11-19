@@ -2,12 +2,12 @@ package be.nabu.libs.nio.impl;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.nio.channels.SocketChannel;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
@@ -54,8 +54,11 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 
 	@Override
 	public void run() {
-		MDC.put("socket", pipeline.getChannel().socket().toString());
-		if (pipeline.getChannel().isConnected() && !pipeline.isClosed()) {
+		pipeline.putMDCContext();
+		// either it's a socketchannel and connected, or the channel is at least open
+		boolean open = (pipeline.getChannel() instanceof SocketChannel && ((SocketChannel) pipeline.getChannel()).isConnected())
+			|| (!(pipeline.getChannel() instanceof SocketChannel) && pipeline.getChannel().isOpen());
+		if (open && !pipeline.isClosed()) {
 			while(!Thread.interrupted()) {
 				// first check if the pipeline has a parent that is draining
 				if (pipeline.getParentPipeline() != null && !pipeline.getParentPipeline().getResponseWriter().isDone()) {
@@ -81,7 +84,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				else {
 					if (timer != null) {
 						long timed = timer.stop();
-						String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket());
+						String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress());
 						timer.getMetrics().log(RESPONSE_SIZE + ":" + userId, output.getWrittenTotal());
 						long transferRate = output.getWrittenTotal() / timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS);
 						timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
@@ -106,7 +109,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				return false;
 			}
 			else if (metrics != null) {
-				timer = metrics.start(FORMAT_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocket()));
+				timer = metrics.start(FORMAT_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()));
 			}
 			// reset written amount, even if not using metrics, we don't want it to overflow etc
 			output.setWrittenTotal(0);
@@ -131,7 +134,10 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	}
 	
 	private boolean flush() throws IOException {
-		if (!pipeline.isClosed() && pipeline.getChannel().isConnected() && !pipeline.getChannel().socket().isOutputShutdown()) {
+		boolean open = (pipeline.getChannel() instanceof SocketChannel && ((SocketChannel) pipeline.getChannel()).isConnected() && !((SocketChannel) pipeline.getChannel()).socket().isOutputShutdown())
+			|| (!(pipeline.getChannel() instanceof SocketChannel) && pipeline.getChannel().isOpen());
+		
+		if (!pipeline.isClosed() && open) {
 			// flush the buffer (if required)
 			if (buffer.remainingData() == 0 || buffer.remainingData() == output.write(buffer)) {
 				// try to write to the output
@@ -183,7 +189,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			}
 		}
 		else {
-			logger.debug("Skipping flush (closed: " + pipeline.isClosed() + ", connected: " + pipeline.getChannel().isConnected() + ", output shutdown: " + pipeline.getChannel().socket().isOutputShutdown() + ")");
+			logger.debug("Skipping flush (closed: " + pipeline.isClosed() + ", open: " + open + ")");
 			close();
 			return false;
 		}
