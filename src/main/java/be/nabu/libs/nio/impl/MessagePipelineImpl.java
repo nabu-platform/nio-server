@@ -11,6 +11,7 @@ import java.util.Queue;
 import java.util.concurrent.Future;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -194,6 +195,17 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		finally {
 			// remove it from the server map
 			server.close(selectionKey);
+		}
+	}
+	
+	public void startTls(SSLContext context, SSLServerMode mode) throws SSLException {
+		if (sslContainer == null) {
+			sslContainer = new SSLSocketByteContainer(container, context, mode);
+			sslContainer.setStartTls(true);
+			container = sslContainer;
+		}
+		else {
+			throw new IllegalStateException("Already encrypted");
 		}
 	}
 
