@@ -180,7 +180,9 @@ public class UDPServerImpl implements NIOServer {
 
 	@Override
 	public void setWriteInterest(SelectionKey key, boolean isInterested) {
-		throw new UnsupportedOperationException();		
+		if (isInterested) {
+			throw new UnsupportedOperationException();
+		}
 	}
 
 	@Override
