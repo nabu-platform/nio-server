@@ -69,6 +69,9 @@ public class NIOServerImpl implements NIOServer {
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	
+	private Date lastPrune;
+	private long pruneInterval = 5000;
+	
 	private ExecutorService ioExecutors, processExecutors;
 	private SSLServerMode sslServerMode;
 	private PipelineFactory pipelineFactory;
@@ -255,7 +258,10 @@ public class NIOServerImpl implements NIOServer {
         			iterator.remove();
         		}
         	}
-        	pruneConnections();
+        	if (lastPrune == null || new Date().getTime() - lastPrune.getTime() > pruneInterval) {
+        		pruneConnections();
+        		lastPrune = new Date();
+        	}
         }
 	}
 	
@@ -435,5 +441,12 @@ public class NIOServerImpl implements NIOServer {
 	public void setMaxLifeTime(Long maxLifeTime) {
 		this.maxLifeTime = maxLifeTime;
 	}
-	
+
+	public long getPruneInterval() {
+		return pruneInterval;
+	}
+
+	public void setPruneInterval(long pruneInterval) {
+		this.pruneInterval = pruneInterval;
+	}
 }
