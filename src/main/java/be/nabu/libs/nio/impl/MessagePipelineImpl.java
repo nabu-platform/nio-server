@@ -330,7 +330,10 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			}
 		}
 		// if we have no data pending, we are waiting for more
-		else if (requestQueue.isEmpty() && responseQueue.isEmpty() && responseWriter.isDone()) {
+		else if (requestQueue.isEmpty() && responseQueue.isEmpty() && responseWriter.isDone() 
+				&& (futureProcess == null || futureProcess.isDone())
+				&& (futureRead == null || futureRead.isDone())
+				&& (futureWrite == null || futureWrite.isDone())) {
 			return PipelineState.WAITING;
 		}
 		// we are processing stuff!

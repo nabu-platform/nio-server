@@ -35,6 +35,7 @@ import be.nabu.libs.nio.api.ConnectionAcceptor;
 import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
+import be.nabu.libs.nio.api.PipelineState;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.utils.io.SSLServerMode;
@@ -78,7 +79,8 @@ public class NIOServerImpl implements NIOServer {
 	private ConnectionAcceptor connectionAcceptor;
 	private EventDispatcher dispatcher;
 	
-	private Long maxIdleTime, maxLifeTime;
+	// by default an idle connection will time out after 2 minutes and even active connections will be dropped after 1 hour expecting a reconnect if necessary
+	private Long maxIdleTime = 2l*60*1000, maxLifeTime = 60l*1000*60;
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;
@@ -277,10 +279,10 @@ public class NIOServerImpl implements NIOServer {
 				Date now = new Date();
 				// the connection is gone
 				if (!next.getKey().isConnected()
-					// the connection has exceeded its max lifetime
-					|| (maxLifeTime != null && now.getTime() - next.getValue().getSourceContext().getCreated().getTime() > maxLifeTime)
+					// the connection has exceeded its max lifetime and it is currently idle
+					|| (maxLifeTime != null && maxLifeTime != 0 && PipelineState.WAITING.equals(next.getValue().getState()) && now.getTime() - next.getValue().getSourceContext().getCreated().getTime() > maxLifeTime)
 					// the connection has exceeded its max idletime
-					|| (maxIdleTime != null && lastActivity != null && now.getTime() - lastActivity.getTime() > maxIdleTime)) {
+					|| (maxIdleTime != null && maxIdleTime != 0 && PipelineState.WAITING.equals(next.getValue().getState()) && lastActivity != null && now.getTime() - lastActivity.getTime() > maxIdleTime)) {
 					logger.warn("Pruning connection " + next.getKey() + ": [connected:" + next.getKey().isConnected() + "], [created:" + next.getValue().getSourceContext().getCreated() + "/" + maxLifeTime + "], [lastActivity:" + lastActivity + "/" + maxIdleTime + "]");
 					try {
 						next.getKey().close();
