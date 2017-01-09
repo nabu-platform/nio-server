@@ -48,6 +48,9 @@ public class RequestProcessor<T, R> implements Runnable {
 			}
 		}
 		PipelineUtils.setPipelineForThread(null);
+		if (!pipeline.getRequestQueue().isEmpty()) {
+			pipeline.process(true);
+		}
 	}
 
 }

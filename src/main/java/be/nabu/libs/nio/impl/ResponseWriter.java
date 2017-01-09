@@ -58,6 +58,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 		// either it's a socketchannel and connected, or the channel is at least open
 		boolean open = (pipeline.getChannel() instanceof SocketChannel && ((SocketChannel) pipeline.getChannel()).isConnected())
 			|| (!(pipeline.getChannel() instanceof SocketChannel) && pipeline.getChannel().isOpen());
+
 		if (open && !pipeline.isClosed()) {
 			while(!Thread.interrupted()) {
 				// first check if the pipeline has a parent that is draining
@@ -70,6 +71,10 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 					break;
 				}
 			}
+		}
+		
+		if (!pipeline.getResponseQueue().isEmpty()) {
+			pipeline.write(true);
 		}
 	}
 
@@ -102,7 +107,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				return false;
 			}
 			response = pipeline.getResponseQueue().poll();
-			
+
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			// if no response, the queue is empty
 			if (response == null) {

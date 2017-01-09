@@ -63,15 +63,15 @@ public class NIOServerImpl implements NIOServer {
     
 	private ServerSocketChannel channel;
 	private int port;
-	private Selector selector;
-	private Map<SocketChannel, Pipeline> channels = new ConcurrentHashMap<SocketChannel, Pipeline>();
+	protected Selector selector;
+	protected Map<SocketChannel, Pipeline> channels = new ConcurrentHashMap<SocketChannel, Pipeline>();
 	private SSLContext sslContext;
 	private MetricInstance metrics;
 	
-	private Logger logger = LoggerFactory.getLogger(getClass());
+	protected Logger logger = LoggerFactory.getLogger(getClass());
 	
-	private Date lastPrune;
-	private long pruneInterval = 5000;
+	protected Date lastPrune;
+	protected long pruneInterval = 5000;
 	
 	private ExecutorService ioExecutors, processExecutors;
 	private SSLServerMode sslServerMode;
@@ -267,25 +267,28 @@ public class NIOServerImpl implements NIOServer {
         }
 	}
 	
-	private void pruneConnections() {
+	protected void pruneConnections() {
 		synchronized(channels) {
 			Iterator<Entry<SocketChannel, Pipeline>> iterator = channels.entrySet().iterator();
 			while (iterator.hasNext()) {
 				Entry<SocketChannel, Pipeline> next = iterator.next();
-				Date lastActivity = next.getValue().getLastRead();
+				Date lastActivity = next.getValue().getSourceContext().getCreated();
+				if (next.getValue().getLastRead() != null) {
+					lastActivity = next.getValue().getLastRead();
+				}
 				if (next.getValue().getLastWritten() != null && (lastActivity == null || lastActivity.after(next.getValue().getLastWritten()))) {
 					lastActivity = next.getValue().getLastWritten();
 				}
 				Date now = new Date();
 				// the connection is gone
-				if (!next.getKey().isConnected()
+				if ((!next.getKey().isConnected() && !next.getKey().isConnectionPending())
 					// the connection has exceeded its max lifetime and it is currently idle
 					|| (maxLifeTime != null && maxLifeTime != 0 && PipelineState.WAITING.equals(next.getValue().getState()) && now.getTime() - next.getValue().getSourceContext().getCreated().getTime() > maxLifeTime)
 					// the connection has exceeded its max idletime
 					|| (maxIdleTime != null && maxIdleTime != 0 && PipelineState.WAITING.equals(next.getValue().getState()) && lastActivity != null && now.getTime() - lastActivity.getTime() > maxIdleTime)) {
 					logger.warn("Pruning connection " + next.getKey() + ": [connected:" + next.getKey().isConnected() + "], [created:" + next.getValue().getSourceContext().getCreated() + "/" + maxLifeTime + "], [lastActivity:" + lastActivity + "/" + maxIdleTime + "]");
 					try {
-						next.getKey().close();
+						next.getValue().close();
 					}
 					catch (IOException e) {
 						logger.warn("Can not close connection", e);
@@ -322,22 +325,26 @@ public class NIOServerImpl implements NIOServer {
 		if (channel != null) {
 			try {
 				channel.close();
-				for (Pipeline pipeline : channels.values()) {
-					try {
-						pipeline.close();
-					}
-					catch (Exception e) {
-						logger.error("Could not close pipeline", e);
-					}
-				}
-				synchronized(channels) {
-					channels.clear();
-				}
+				closePipelines();
 				channel = null;
 			}
 			catch (IOException e) {
 				logger.error("Failed to close server", e);
 			}
+		}
+	}
+
+	protected void closePipelines() {
+		for (Pipeline pipeline : channels.values()) {
+			try {
+				pipeline.close();
+			}
+			catch (Exception e) {
+				logger.error("Could not close pipeline", e);
+			}
+		}
+		synchronized(channels) {
+			channels.clear();
 		}
 	}
 	
@@ -451,4 +458,9 @@ public class NIOServerImpl implements NIOServer {
 	public void setPruneInterval(long pruneInterval) {
 		this.pruneInterval = pruneInterval;
 	}
+
+	public int getPort() {
+		return port;
+	}
+	
 }

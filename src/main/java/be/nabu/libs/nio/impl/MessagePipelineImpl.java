@@ -5,8 +5,12 @@ import java.net.SocketAddress;
 import java.nio.channels.Channel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
+import java.security.NoSuchAlgorithmException;
 import java.security.cert.Certificate;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
 
@@ -23,9 +27,10 @@ import be.nabu.libs.nio.api.MessageFormatterFactory;
 import be.nabu.libs.nio.api.MessageParserFactory;
 import be.nabu.libs.nio.api.MessagePipeline;
 import be.nabu.libs.nio.api.MessageProcessorFactory;
-import be.nabu.libs.nio.api.PipelineState;
-import be.nabu.libs.nio.api.SecurityContext;
 import be.nabu.libs.nio.api.NIOServer;
+import be.nabu.libs.nio.api.PipelineState;
+import be.nabu.libs.nio.api.PipelineWithMetaData;
+import be.nabu.libs.nio.api.SecurityContext;
 import be.nabu.libs.nio.api.SourceContext;
 import be.nabu.libs.nio.api.UpgradeableMessagePipeline;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
@@ -38,7 +43,7 @@ import be.nabu.utils.io.containers.bytes.ByteChannelContainer;
 import be.nabu.utils.io.containers.bytes.SSLSocketByteContainer;
 import be.nabu.utils.io.containers.bytes.SocketByteContainer;
 
-public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R> {
+public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R>, PipelineWithMetaData {
 	
 	private Date created = new Date();
 	private Date lastRead, lastWritten, lastProcessed;
@@ -62,6 +67,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private ExceptionFormatter<T, R> exceptionFormatter;
 	private long readTimeout, writeTimeout;
 	private int requestLimit, responseLimit;
+	private Map<String, Object> metaData = Collections.synchronizedMap(new HashMap<String, Object>());
 	
 	/**
 	 * It is possible that this pipeline replaced an existing pipeline (for example after a connection upgrade or a live protocol switch)
@@ -70,8 +76,14 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private MessagePipelineImpl<?, ?> parentPipeline;
 	
 	private boolean closed;
+	private boolean useSsl;
+	private boolean debug;
 	
 	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
+		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null);
+	}
+	
+	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter, boolean isClient, boolean useSsl) throws IOException {
 		this.server = server;
 		this.selectionKey = selectionKey;
 		this.requestParserFactory = requestParserFactory;
@@ -79,14 +91,28 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.messageProcessorFactory = messageProcessorFactory;
 		this.keepAliveDecider = keepAliveDecider;
 		this.exceptionFormatter = exceptionFormatter;
+		this.useSsl = useSsl;
 		this.requestQueue = new PipelineRequestQueue<T>(this);
 		this.responseQueue = new PipelineResponseQueue<R>(this);
 		this.channel = selectionKey.channel();
 		this.container = this.channel instanceof SocketChannel ? new SocketByteContainer((SocketChannel) channel) : new ByteChannelContainer<UDPChannel>((UDPChannel) this.channel);
 		// perform SSL if required
-		if (server.getSSLContext() != null) {
-			sslContainer = new SSLSocketByteContainer(container, server.getSSLContext(), server.getSSLServerMode());
+		if (useSsl) {
+			try {
+				if (isClient) {
+					sslContainer = new SSLSocketByteContainer(container, server.getSSLContext() == null ? SSLContext.getDefault() : server.getSSLContext(), true);
+				}
+				else {
+					sslContainer = new SSLSocketByteContainer(container, server.getSSLContext() == null ? SSLContext.getDefault() : server.getSSLContext(), server.getSSLServerMode() == null ? SSLServerMode.NO_CLIENT_CERTIFICATES : server.getSSLServerMode());
+				}
+			}
+			catch (NoSuchAlgorithmException e) {
+				throw new RuntimeException(e);
+			}
 			container = sslContainer;
+		}
+		if (debug) {
+			container = ContainerDebugger.debug(container);
 		}
 		this.requestFramer = new RequestFramer<T>(this, container);
 		this.responseWriter = new ResponseWriter<R>(this, container);
@@ -135,10 +161,14 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	}
 	
 	public void write() {
+		write(false);
+	}
+
+	void write(boolean force) {
 		lastWritten = new Date();
-		if (futureWrite == null || futureWrite.isDone()) {
+		if (force || futureWrite == null || futureWrite.isDone()) {
 			synchronized(this) {
-				if (futureWrite == null || futureWrite.isDone()) {
+				if (force || futureWrite == null || futureWrite.isDone()) {
 					futureWrite = server.submitIOTask(responseWriter);
 				}
 			}
@@ -146,10 +176,14 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	}
 	
 	public void process() {
+		process(false);
+	}
+
+	void process(boolean force) {
 		lastProcessed = new Date();
-		if (futureProcess == null || futureProcess.isDone()) {
+		if (force || futureProcess == null || futureProcess.isDone()) {
 			synchronized(this) {
-				if (futureProcess == null || futureProcess.isDone()) {
+				if (force || futureProcess == null || futureProcess.isDone()) {
 					futureProcess = server.submitProcessTask(requestProcessor);
 				}
 			}
@@ -196,6 +230,13 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			// remove it from the server map
 			server.close(selectionKey);
 		}
+	}
+	
+	public void startHandshake() throws IOException {
+		if (sslContainer == null) {
+			throw new IllegalStateException("Not a secure container");
+		}
+		((SSLSocketByteContainer) sslContainer).shakeHands();
 	}
 	
 	public void startTls(SSLContext context, SSLServerMode mode) throws SSLException {
@@ -399,4 +440,18 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	public Date getLastProcessed() {
 		return lastProcessed;
 	}
+
+	@Override
+	public Map<String, Object> getMetaData() {
+		return metaData;
+	}
+
+	public boolean isUseSsl() {
+		return useSsl;
+	}
+
+	public Container<ByteBuffer> getContainer() {
+		return container;
+	}
+	
 }
