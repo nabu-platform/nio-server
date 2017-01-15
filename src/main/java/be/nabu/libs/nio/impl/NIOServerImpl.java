@@ -79,8 +79,8 @@ public class NIOServerImpl implements NIOServer {
 	private ConnectionAcceptor connectionAcceptor;
 	private EventDispatcher dispatcher;
 	
-	// by default an idle connection will time out after 2 minutes and even active connections will be dropped after 1 hour expecting a reconnect if necessary
-	private Long maxIdleTime = 2l*60*1000, maxLifeTime = 60l*1000*60;
+	// by default an idle connection will time out after 5 minutes and even active connections will be dropped after 1 hour expecting a reconnect if necessary
+	private Long maxIdleTime = 5l*60*1000, maxLifeTime = 60l*1000*60;
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;

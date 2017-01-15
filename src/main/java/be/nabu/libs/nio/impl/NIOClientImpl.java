@@ -86,76 +86,78 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 		selector = Selector.open();
 		while (started) {
 			selector.select(10000);
-			for (Runnable callable : runnables) {
-				callable.run();
+			if (started) {
+				for (Runnable callable : runnables) {
+					callable.run();
+				}
+				runnables.clear();
+				Set<SelectionKey> selectedKeys = selector.selectedKeys();
+	        	Iterator<SelectionKey> iterator = selectedKeys.iterator();
+	        	while (iterator.hasNext()) {
+	        		SelectionKey key = iterator.next();
+	        		final SocketChannel clientChannel = (SocketChannel) key.channel();
+	        		if (!clientChannel.isConnected() && key.isConnectable()) {
+	        			if (!finalizers.contains(clientChannel)) {
+	        				finalizers.add(clientChannel);
+		        			submitIOTask(new Runnable() {
+		        				public void run() {
+		        					try {
+		        						logger.debug("Finalizing accepted connection to: {}", clientChannel.getRemoteAddress());
+				        				// finalize the connection
+				            			while (clientChannel.isConnectionPending() || !clientChannel.finishConnect()) {
+				            				clientChannel.finishConnect();
+				            			}
+				            			PipelineFuture pipelineFuture = futures.get(clientChannel);
+				            			if (pipelineFuture != null) {
+				            				logger.debug("Realizing {}", pipelineFuture);
+				            				pipelineFuture.unstage();
+				            			}
+				            			else {
+				            				logger.warn("Unknown channel: " + clientChannel);
+				            			}
+		        					}
+		        					catch (Exception e) {
+		        						logger.error("Could not finalize connection", e);
+		        						throw new RuntimeException(e);
+		        					}
+		        					finally {
+		        						finalizers.remove(clientChannel);
+		        					}
+		        				}
+		        			});
+	        			}
+	        		}
+	        		else if (!channels.containsKey(clientChannel)) {
+	        			logger.warn("No channel, cancelling key for: {}", clientChannel.socket());
+	        			close(key);
+	        		}
+	        		else if (!clientChannel.isConnected() || !clientChannel.isOpen() || clientChannel.socket().isInputShutdown()) {
+	        			logger.warn("Disconnected, cancelling key for: {}", clientChannel.socket());
+	    				Pipeline pipeline = channels.get(clientChannel);
+	    				if (pipeline != null) {
+							pipeline.close();
+	    				}
+	    				else {
+	    					close(key);
+	    				}
+	        		}
+	        		else {
+	        			Pipeline pipeline = channels.get(clientChannel);
+	    				if (key.isReadable() && pipeline != null) {
+	    					logger.trace("Scheduling pipeline, new data for: {}", clientChannel.socket());
+	    					pipeline.read();
+	    				}
+	        			if (key.isWritable() && pipeline != null) {
+	        				logger.trace("Scheduling write processor, write buffer available for: {}", clientChannel.socket());
+	    					pipeline.write();
+	        			}
+	    			}
+	        		if (lastPrune == null || new Date().getTime() - lastPrune.getTime() > pruneInterval) {
+	            		pruneConnections();
+	            		lastPrune = new Date();
+	            	}
+	        	}
 			}
-			runnables.clear();
-			Set<SelectionKey> selectedKeys = selector.selectedKeys();
-        	Iterator<SelectionKey> iterator = selectedKeys.iterator();
-        	while (iterator.hasNext()) {
-        		SelectionKey key = iterator.next();
-        		final SocketChannel clientChannel = (SocketChannel) key.channel();
-        		if (!clientChannel.isConnected() && key.isConnectable()) {
-        			if (!finalizers.contains(clientChannel)) {
-        				finalizers.add(clientChannel);
-	        			submitIOTask(new Runnable() {
-	        				public void run() {
-	        					try {
-	        						logger.debug("Finalizing accepted connection to: {}", clientChannel.getRemoteAddress());
-			        				// finalize the connection
-			            			while (clientChannel.isConnectionPending() || !clientChannel.finishConnect()) {
-			            				clientChannel.finishConnect();
-			            			}
-			            			PipelineFuture pipelineFuture = futures.get(clientChannel);
-			            			if (pipelineFuture != null) {
-			            				logger.debug("Realizing {}", pipelineFuture);
-			            				pipelineFuture.unstage();
-			            			}
-			            			else {
-			            				logger.warn("Unknown channel: " + clientChannel);
-			            			}
-	        					}
-	        					catch (Exception e) {
-	        						logger.error("Could not finalize connection", e);
-	        						throw new RuntimeException(e);
-	        					}
-	        					finally {
-	        						finalizers.remove(clientChannel);
-	        					}
-	        				}
-	        			});
-        			}
-        		}
-        		else if (!channels.containsKey(clientChannel)) {
-        			logger.warn("No channel, cancelling key for: {}", clientChannel.socket());
-        			close(key);
-        		}
-        		else if (!clientChannel.isConnected() || !clientChannel.isOpen() || clientChannel.socket().isInputShutdown()) {
-        			logger.warn("Disconnected, cancelling key for: {}", clientChannel.socket());
-    				Pipeline pipeline = channels.get(clientChannel);
-    				if (pipeline != null) {
-						pipeline.close();
-    				}
-    				else {
-    					close(key);
-    				}
-        		}
-        		else {
-        			Pipeline pipeline = channels.get(clientChannel);
-    				if (key.isReadable() && pipeline != null) {
-    					logger.trace("Scheduling pipeline, new data for: {}", clientChannel.socket());
-    					pipeline.read();
-    				}
-        			if (key.isWritable() && pipeline != null) {
-        				logger.trace("Scheduling write processor, write buffer available for: {}", clientChannel.socket());
-    					pipeline.write();
-        			}
-    			}
-        		if (lastPrune == null || new Date().getTime() - lastPrune.getTime() > pruneInterval) {
-            		pruneConnections();
-            		lastPrune = new Date();
-            	}
-        	}
 		}
 	}
 
@@ -163,6 +165,8 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 	public void stop() {
 		started = false;
 		closePipelines();
+		// make sure we trigger the selector
+		selector.wakeup();
 	}
 	
 	public NIOConnector getConnector() {
@@ -242,4 +246,9 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 			return "pipelineFuture to: " + (stage == null ? "unstaged" : stage.getSourceContext().getSocketAddress());
 		}
 	}
+
+	public boolean isStarted() {
+		return started;
+	}
+	
 }
