@@ -32,6 +32,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	private boolean keepAlive = true;
 	private MetricTimer timer;
 	private Date started;
+	private volatile boolean writing = true;
 	
 	ResponseWriter(MessagePipelineImpl<?, T> pipeline, WritableContainer<ByteBuffer> output) {
 		this.pipeline = pipeline;
@@ -64,6 +65,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				// first check if the pipeline has a parent that is draining
 				if (pipeline.getParentPipeline() != null && !pipeline.getParentPipeline().getResponseWriter().isDone()) {
 					if (!pipeline.getParentPipeline().getResponseWriter().write()) {
+						writing = false;
 						break;
 					}
 				}
@@ -71,10 +73,6 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 					break;
 				}
 			}
-		}
-		
-		if (!pipeline.getResponseQueue().isEmpty()) {
-			pipeline.write(true);
 		}
 	}
 
@@ -111,6 +109,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			// if no response, the queue is empty
 			if (response == null) {
+				writing = false;
 				return false;
 			}
 			else if (metrics != null) {
@@ -138,6 +137,14 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 		return true;
 	}
 	
+	public boolean isWriting() {
+		return writing;
+	}
+	
+	void setWriting() {
+		this.writing = true;
+	}
+
 	private boolean flush() throws IOException {
 		boolean open = (pipeline.getChannel() instanceof SocketChannel && ((SocketChannel) pipeline.getChannel()).isConnected() && !((SocketChannel) pipeline.getChannel()).socket().isOutputShutdown())
 			|| (!(pipeline.getChannel() instanceof SocketChannel) && pipeline.getChannel().isOpen());

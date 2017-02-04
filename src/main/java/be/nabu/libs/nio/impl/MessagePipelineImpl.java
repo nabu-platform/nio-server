@@ -36,6 +36,7 @@ import be.nabu.libs.nio.api.UpgradeableMessagePipeline;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.libs.nio.impl.udp.UDPChannel;
+import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.SSLServerMode;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.Container;
@@ -77,13 +78,13 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	
 	private boolean closed;
 	private boolean useSsl;
-	private boolean debug;
+	private boolean debug = Boolean.parseBoolean(System.getProperty("nio.debug.pipeline", "false"));
 	
 	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
-		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null);
+		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null, 0);
 	}
 	
-	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter, boolean isClient, boolean useSsl) throws IOException {
+	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter, boolean isClient, boolean useSsl, int outputBufferSize) throws IOException {
 		this.server = server;
 		this.selectionKey = selectionKey;
 		this.requestParserFactory = requestParserFactory;
@@ -110,6 +111,12 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 				throw new RuntimeException(e);
 			}
 			container = sslContainer;
+		}
+		if (outputBufferSize > 0) {
+			container = IOUtils.wrap(
+				container,
+				IOUtils.bufferWritable(container, IOUtils.newByteBuffer(outputBufferSize, true))
+			);
 		}
 		if (debug) {
 			container = ContainerDebugger.debug(container);
@@ -169,6 +176,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		if (force || futureWrite == null || futureWrite.isDone()) {
 			synchronized(this) {
 				if (force || futureWrite == null || futureWrite.isDone()) {
+					responseWriter.setWriting();
 					futureWrite = server.submitIOTask(responseWriter);
 				}
 			}

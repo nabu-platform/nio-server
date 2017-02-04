@@ -31,10 +31,10 @@ public class ContainerDebugger {
 			long remainingData = buffer.remainingData();
 			String message = new String(IOUtils.toBytes(buffer));
 			if (this.message == null) {
-				System.out.println(message);
+				System.out.print(message);
 			}
 			else {
-				System.out.println(this.message.replace("${message}", message));
+				System.out.print(this.message.replace("${message}", message));
 			}
 			return remainingData;
 		}

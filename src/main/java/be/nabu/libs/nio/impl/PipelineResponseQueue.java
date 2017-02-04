@@ -31,6 +31,7 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 			if (metrics != null) {
 				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()), 1);
 			}
+			// if the responsewriter is no longer writing, force the schedule
 			pipeline.write();
 			return true;
 		}
