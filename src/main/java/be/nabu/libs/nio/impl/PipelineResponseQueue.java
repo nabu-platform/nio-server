@@ -31,7 +31,10 @@ public class PipelineResponseQueue<T> extends ConcurrentLinkedQueue<T> implement
 			if (metrics != null) {
 				metrics.increment(METRIC_RESPONSES + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()), 1);
 			}
-			// if the responsewriter is no longer writing, force the schedule
+			// for a while it seemed websocket messages were arriving out of sync, new messages triggered the sending of old replies (it seems)
+			// this could however not be reproduced but if it can be, it could be interesting to use the force boolean with the following value:
+			// !pipeline.getResponseWriter().isWriting()
+			// the writing boolean keeps track of whether or not at any given point in time, the response writer will pick up a new message (even if the future is still running)
 			pipeline.write();
 			return true;
 		}

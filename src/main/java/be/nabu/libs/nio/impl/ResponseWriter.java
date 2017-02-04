@@ -61,17 +61,22 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			|| (!(pipeline.getChannel() instanceof SocketChannel) && pipeline.getChannel().isOpen());
 
 		if (open && !pipeline.isClosed()) {
-			while(!Thread.interrupted()) {
-				// first check if the pipeline has a parent that is draining
-				if (pipeline.getParentPipeline() != null && !pipeline.getParentPipeline().getResponseWriter().isDone()) {
-					if (!pipeline.getParentPipeline().getResponseWriter().write()) {
-						writing = false;
+			try {
+				while(!Thread.interrupted()) {
+					// first check if the pipeline has a parent that is draining
+					if (pipeline.getParentPipeline() != null && !pipeline.getParentPipeline().getResponseWriter().isDone()) {
+						if (!pipeline.getParentPipeline().getResponseWriter().write()) {
+							writing = false;
+							break;
+						}
+					}
+					else if (!write()) {
 						break;
 					}
 				}
-				else if (!write()) {
-					break;
-				}
+			}
+			catch (Exception e) {
+				logger.error("Writing failed", e);
 			}
 		}
 	}
@@ -89,7 +94,8 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 						long timed = timer.stop();
 						String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress());
 						timer.getMetrics().log(RESPONSE_SIZE + ":" + userId, output.getWrittenTotal());
-						long transferRate = output.getWrittenTotal() / timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS);
+						long timing = timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS);
+						long transferRate = timing == 0 ? output.getWrittenTotal() : output.getWrittenTotal() / timing;
 						timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
 						timer = null;
 					}
