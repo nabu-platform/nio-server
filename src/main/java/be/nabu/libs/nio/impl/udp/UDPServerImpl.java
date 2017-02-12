@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import be.nabu.libs.events.api.EventDispatcher;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.nio.api.ConnectionAcceptor;
+import be.nabu.libs.nio.api.NIODebugger;
 import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
@@ -47,6 +48,7 @@ public class UDPServerImpl implements NIOServer {
 	private Map<SocketAddress, Pipeline> pipelines = new ConcurrentHashMap<SocketAddress, Pipeline>();
 	private DatagramChannel channel;
 	private Logger logger = LoggerFactory.getLogger(getClass());
+	private NIODebugger debugger;
 
 	public UDPServerImpl(int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.port = port;
@@ -214,4 +216,13 @@ public class UDPServerImpl implements NIOServer {
 		return port;
 	}
 
+	@Override
+	public NIODebugger getDebugger() {
+		return debugger;
+	}
+
+	public void setDebugger(NIODebugger debugger) {
+		this.debugger = debugger;
+	}
+	
 }

@@ -17,4 +17,5 @@ public interface NIOServer extends Server {
 	public Collection<Pipeline> getPipelines();
 	public ConnectionAcceptor getConnectionAcceptor();
 	public void setConnectionAcceptor(ConnectionAcceptor connectionAcceptor);
+	public NIODebugger getDebugger();
 }

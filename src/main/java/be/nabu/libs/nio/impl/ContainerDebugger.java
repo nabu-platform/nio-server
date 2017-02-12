@@ -2,6 +2,9 @@ package be.nabu.libs.nio.impl;
 
 import java.io.IOException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.Container;
@@ -13,6 +16,8 @@ import be.nabu.utils.io.containers.WritableContainerMulticaster;
 public class ContainerDebugger {
 	
 	public static final class PrintContainer implements WritableContainer<ByteBuffer> {
+		
+		private Logger logger = LoggerFactory.getLogger(getClass());
 		
 		private String message;
 
@@ -31,10 +36,10 @@ public class ContainerDebugger {
 			long remainingData = buffer.remainingData();
 			String message = new String(IOUtils.toBytes(buffer));
 			if (this.message == null) {
-				System.out.print(message);
+				logger.info(message);
 			}
 			else {
-				System.out.print(this.message.replace("${message}", message));
+				logger.info(this.message.replace("${message}", message));
 			}
 			return remainingData;
 		}

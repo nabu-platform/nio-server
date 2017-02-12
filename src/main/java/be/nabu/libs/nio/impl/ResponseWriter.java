@@ -20,12 +20,13 @@ import be.nabu.utils.io.containers.CountingWritableContainerImpl;
 
 public class ResponseWriter<T> implements Closeable, Runnable {
 
+	public static final int BUFFER_SIZE = 8192;
 	public static final String FORMAT_TIME = "formatTime";
 	public static final String RESPONSE_SIZE = "responseSize";
 	public static final String TRANSFER_RATE = "responseTransferRate";
 	
 	private Logger logger = LoggerFactory.getLogger(getClass());
-	private ByteBuffer buffer = IOUtils.newByteBuffer(4096, true);
+	private ByteBuffer buffer = IOUtils.newByteBuffer(BUFFER_SIZE, true);
 	private CountingWritableContainerImpl<ByteBuffer> output;
 	private MessagePipelineImpl<?, T> pipeline;
 	private ReadableContainer<ByteBuffer> readable;

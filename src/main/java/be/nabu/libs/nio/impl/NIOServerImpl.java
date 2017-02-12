@@ -32,6 +32,7 @@ import be.nabu.libs.events.api.EventDispatcher;
 import be.nabu.libs.metrics.api.MetricGauge;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.nio.api.ConnectionAcceptor;
+import be.nabu.libs.nio.api.NIODebugger;
 import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
@@ -81,6 +82,7 @@ public class NIOServerImpl implements NIOServer {
 	
 	// by default an idle connection will time out after 5 minutes and even active connections will be dropped after 1 hour expecting a reconnect if necessary
 	private Long maxIdleTime = 5l*60*1000, maxLifeTime = 60l*1000*60;
+	private NIODebugger debugger;
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;
@@ -462,5 +464,12 @@ public class NIOServerImpl implements NIOServer {
 	public int getPort() {
 		return port;
 	}
-	
+
+	@Override
+	public NIODebugger getDebugger() {
+		return debugger;
+	}
+	public void setDebugger(NIODebugger debugger) {
+		this.debugger = debugger;
+	}
 }

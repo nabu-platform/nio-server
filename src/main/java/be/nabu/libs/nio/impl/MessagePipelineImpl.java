@@ -44,6 +44,12 @@ import be.nabu.utils.io.containers.bytes.ByteChannelContainer;
 import be.nabu.utils.io.containers.bytes.SSLSocketByteContainer;
 import be.nabu.utils.io.containers.bytes.SocketByteContainer;
 
+/**
+ * Note to self: do _not_ buffer the output at this level
+ * The response writer attempts a flush() at the very end but can't tell whether it was successful or not
+ * This means the response writer will assume it succeeded (because in the past there was no buffer) and unregister the write interest
+ * This can lead (in some cases) to missed data _if_ the buffer contained more content than the socket buffers could handle.
+ */
 public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R>, PipelineWithMetaData {
 	
 	private Date created = new Date();
@@ -118,7 +124,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 				IOUtils.bufferWritable(container, IOUtils.newByteBuffer(outputBufferSize, true))
 			);
 		}
-		if (debug) {
+		if (debug || (server.getDebugger() != null && server.getDebugger().debug(this))) {
 			container = ContainerDebugger.debug(container);
 		}
 		this.requestFramer = new RequestFramer<T>(this, container);
