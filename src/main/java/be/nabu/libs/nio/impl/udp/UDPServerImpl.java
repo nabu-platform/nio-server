@@ -49,6 +49,7 @@ public class UDPServerImpl implements NIOServer {
 	private DatagramChannel channel;
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private NIODebugger debugger;
+	private boolean stopping;
 
 	public UDPServerImpl(int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.port = port;
@@ -116,6 +117,7 @@ public class UDPServerImpl implements NIOServer {
 	@Override
 	public void stop() {
 		if (channel != null) {
+			stopping = true;
 			try {
 				channel.close();
 				// this construct seems safer than that in NIOServerImpl, not sure why it is implemented as it is there
@@ -136,6 +138,9 @@ public class UDPServerImpl implements NIOServer {
 			}
 			catch (IOException e) {
 				logger.error("Failed to close server", e);
+			}
+			finally {
+				stopping = false;
 			}
 		}		
 	}
@@ -223,6 +228,16 @@ public class UDPServerImpl implements NIOServer {
 
 	public void setDebugger(NIODebugger debugger) {
 		this.debugger = debugger;
+	}
+
+	@Override
+	public boolean isStopping() {
+		return stopping;
+	}
+
+	@Override
+	public boolean isRunning() {
+		return channel != null;
 	}
 	
 }

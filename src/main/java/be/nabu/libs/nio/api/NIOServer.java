@@ -18,4 +18,6 @@ public interface NIOServer extends Server {
 	public ConnectionAcceptor getConnectionAcceptor();
 	public void setConnectionAcceptor(ConnectionAcceptor connectionAcceptor);
 	public NIODebugger getDebugger();
+	public boolean isStopping();
+	public boolean isRunning();
 }

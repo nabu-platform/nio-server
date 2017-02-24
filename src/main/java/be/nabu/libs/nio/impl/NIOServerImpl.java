@@ -83,6 +83,7 @@ public class NIOServerImpl implements NIOServer {
 	// by default an idle connection will time out after 5 minutes and even active connections will be dropped after 1 hour expecting a reconnect if necessary
 	private Long maxIdleTime = 5l*60*1000, maxLifeTime = 60l*1000*60;
 	private NIODebugger debugger;
+	private boolean stopping;
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;
@@ -107,13 +108,16 @@ public class NIOServerImpl implements NIOServer {
 	@Override
 	public void close(SelectionKey selectionKey) {
 		try {
-			dispatcher.fire(new ConnectionEventImpl(this, channels.get(selectionKey.channel()), ConnectionEvent.ConnectionState.CLOSED), this);
 			if (selectionKey != null) {
 				selectionKey.cancel();
-			}
-			if (channels.containsKey(selectionKey.channel())) {
-				synchronized(channels) {
-					channels.remove(selectionKey.channel());
+				if (channels.containsKey(selectionKey.channel())) {
+					Pipeline removed;
+					synchronized(channels) {
+						removed = channels.remove(selectionKey.channel());
+					}
+					if (removed != null) {
+						dispatcher.fire(new ConnectionEventImpl(this, removed, ConnectionEvent.ConnectionState.CLOSED), this);
+					}
 				}
 			}
 		}
@@ -325,6 +329,7 @@ public class NIOServerImpl implements NIOServer {
 	@Override
 	public void stop() {
 		if (channel != null) {
+			stopping = true;
 			try {
 				channel.close();
 				closePipelines();
@@ -333,7 +338,18 @@ public class NIOServerImpl implements NIOServer {
 			catch (IOException e) {
 				logger.error("Failed to close server", e);
 			}
+			finally {
+				stopping = false;
+			}
 		}
+	}
+	
+	public boolean isStopping() {
+		return stopping;
+	}
+	
+	public boolean isRunning() {
+		return channel != null;
 	}
 
 	protected void closePipelines() {
