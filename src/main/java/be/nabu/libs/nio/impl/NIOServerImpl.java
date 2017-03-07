@@ -155,7 +155,7 @@ public class NIOServerImpl implements NIOServer {
         properties.put(CHANNEL_TYPE, CHANNEL_TYPE_SERVER);
         socketServerSelectionKey.attach(properties);
         
-        while(true) {
+        while(channel != null) {
         	// the selectNow() does NOT block whereas the select() does
         	// we want to make sure we update the interestOps() as soon as possible, we can't do a fully blocking wait here, unregistered write ops would simply be ignored
         	// the selectNow() however ends up in a permanent while loop and takes up 100% of at least one thread
@@ -221,7 +221,7 @@ public class NIOServerImpl implements NIOServer {
 		        				logger.warn("No channel, cancelling key for: {}", clientChannel.socket());
 		        				close(key);
 		        			}
-		        			else if (!clientChannel.isConnected() || !clientChannel.isOpen() || clientChannel.socket().isInputShutdown()) {
+		        			else if (!key.isValid() || !clientChannel.isConnected() || !clientChannel.isOpen() || clientChannel.socket().isInputShutdown()) {
 		        				logger.warn("Disconnected, cancelling key for: {}", clientChannel.socket());
 		        				Pipeline pipeline = channels.get(clientChannel);
 		        				if (pipeline != null) {
@@ -260,7 +260,7 @@ public class NIOServerImpl implements NIOServer {
 	        		}
         		}
         		catch (Exception e) {
-        			e.printStackTrace();
+        			logger.error("Unknown failure", e);
         		}
         		finally {
         			iterator.remove();
@@ -328,20 +328,34 @@ public class NIOServerImpl implements NIOServer {
 	
 	@Override
 	public void stop() {
-		if (channel != null) {
-			stopping = true;
+		stopping = true;
+		if (!channels.isEmpty()) {
 			try {
-				channel.close();
 				closePipelines();
-				channel = null;
 			}
-			catch (IOException e) {
-				logger.error("Failed to close server", e);
-			}
-			finally {
-				stopping = false;
+			catch (Exception e) {
+				logger.error("Failed to close pipelines", e);
 			}
 		}
+		if (channel != null) {
+			try {
+				channel.close();
+				channel = null;
+			}
+			catch (Exception e) {
+				logger.error("Failed to close server", e);
+			}
+		}
+		if (selector != null) {
+			try {
+				selector.close();
+				selector = null;
+			}
+			catch (Exception e) {
+				logger.error("Failed to close selector", e);
+			}
+		}
+		stopping = false;
 	}
 	
 	public boolean isStopping() {
@@ -353,15 +367,15 @@ public class NIOServerImpl implements NIOServer {
 	}
 
 	protected void closePipelines() {
-		for (Pipeline pipeline : channels.values()) {
-			try {
-				pipeline.close();
-			}
-			catch (Exception e) {
-				logger.error("Could not close pipeline", e);
-			}
-		}
 		synchronized(channels) {
+			for (Pipeline pipeline : channels.values()) {
+				try {
+					pipeline.close();
+				}
+				catch (Exception e) {
+					logger.error("Could not close pipeline", e);
+				}
+			}
 			channels.clear();
 		}
 	}
