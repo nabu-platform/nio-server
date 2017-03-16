@@ -15,6 +15,7 @@ import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.ReadableContainer;
 import be.nabu.utils.io.containers.CountingReadableContainerImpl;
+import be.nabu.utils.io.containers.EOFReadableContainer;
 import be.nabu.utils.io.containers.PushbackContainerImpl;
 
 public class RequestFramer<T> implements Runnable, Closeable {
@@ -32,10 +33,12 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	private MessagePipelineImpl<T, ?> pipeline;
 	private MetricTimer timer;
 	private Date started;
+	private EOFReadableContainer<ByteBuffer> eof;
 
 	RequestFramer(MessagePipelineImpl<T, ?> pipeline, ReadableContainer<ByteBuffer> readable) {
 		this.pipeline = pipeline;
-		this.counting = new CountingReadableContainerImpl<ByteBuffer>(IOUtils.bufferReadable(readable, IOUtils.newByteBuffer(BUFFER_SIZE, true)));
+		this.eof = new EOFReadableContainer<ByteBuffer>(readable);
+		this.counting = new CountingReadableContainerImpl<ByteBuffer>(IOUtils.bufferReadable(eof, IOUtils.newByteBuffer(BUFFER_SIZE, true)));
 		this.readable = new PushbackContainerImpl<ByteBuffer>(counting);
 	}
 	
@@ -63,6 +66,10 @@ public class RequestFramer<T> implements Runnable, Closeable {
 			}
 			framer.push(readable);
 			if (framer.isClosed()) {
+				closeConnection = true;
+			}
+			// if we encountered an end of file and nothing was read, close the connection
+			else if (eof.isEOF() && counting.getReadTotal() == 0) {
 				closeConnection = true;
 			}
 			if (framer.isDone()) {
