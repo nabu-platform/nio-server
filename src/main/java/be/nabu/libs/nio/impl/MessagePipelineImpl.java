@@ -85,6 +85,8 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private boolean closed;
 	private boolean useSsl;
 	private boolean debug = Boolean.parseBoolean(System.getProperty("nio.debug.pipeline", "false"));
+	private SocketAddress remoteAddress;
+	private Integer localPort;
 	
 	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
 		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null, 0);
@@ -129,7 +131,9 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		}
 		this.requestFramer = new RequestFramer<T>(this, container);
 		this.responseWriter = new ResponseWriter<R>(this, container);
-		this.requestProcessor = new RequestProcessor<T, R>(this); 
+		this.requestProcessor = new RequestProcessor<T, R>(this);
+		
+		initMetadata();
 	}
 	
 	private MessagePipelineImpl(MessagePipelineImpl<?, ?> parentPipeline, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) {
@@ -148,6 +152,27 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.requestFramer = new RequestFramer<T>(this, container);
 		this.responseWriter = new ResponseWriter<R>(this, container);
 		this.requestProcessor = new RequestProcessor<T, R>(this);
+		
+		initMetadata();
+	}
+	
+	private void initMetadata() {
+		if (remoteAddress == null) {
+			if (getChannel() instanceof SocketChannel) {
+				remoteAddress = ((SocketChannel) getChannel()).socket().getRemoteSocketAddress();
+			}
+			else if (getChannel() instanceof UDPChannel) {
+				remoteAddress = ((UDPChannel) getChannel()).getTarget();
+			}
+		}
+		if (localPort == null) {
+			if (getChannel() instanceof SocketChannel) {
+				localPort = ((SocketChannel) getChannel()).socket().getLocalPort();
+			}
+			else if (getChannel() instanceof UDPChannel) {
+				localPort = ((UDPChannel) getChannel()).getServer().getPort();
+			}
+		}
 	}
 	
 	public void registerWriteInterest() {
@@ -331,18 +356,11 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 
 	@Override
 	public SourceContext getSourceContext() {
+		initMetadata();
 		return new SourceContext() {
 			@Override
 			public SocketAddress getSocketAddress() {
-				if (getChannel() instanceof SocketChannel) {
-					return ((SocketChannel) getChannel()).socket().getRemoteSocketAddress();
-				}
-				else if (getChannel() instanceof UDPChannel) {
-					return ((UDPChannel) getChannel()).getTarget();
-				}
-				else {
-					throw new UnsupportedOperationException();
-				}
+				return remoteAddress;
 			}
 			@Override
 			public Date getCreated() {
@@ -350,15 +368,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			}
 			@Override
 			public int getLocalPort() {
-				if (getChannel() instanceof SocketChannel) {
-					return ((SocketChannel) getChannel()).socket().getLocalPort();
-				}
-				else if (getChannel() instanceof UDPChannel) {
-					return ((UDPChannel) getChannel()).getServer().getPort();
-				}
-				else {
-					throw new UnsupportedOperationException();
-				}
+				return localPort;
 			}
 		};
 	}
