@@ -19,35 +19,39 @@ public class RequestProcessor<T, R> implements Runnable {
 	public void run() {
 		pipeline.putMDCContext();
 		PipelineUtils.setPipelineForThread(pipeline);
-		while(!Thread.interrupted()) {
-			T request = pipeline.getRequestQueue().poll();
-			if (request == null) {
-				break;
-			}
-			R response;
-			try {
-				MessageProcessor<T, R> processor = pipeline.getMessageProcessorFactory().newProcessor(request);
-				if (processor == null) {
-					throw new IllegalArgumentException("There is no processor for the request");
+		try {
+			while(!Thread.interrupted()) {
+				T request = pipeline.getRequestQueue().poll();
+				if (request == null) {
+					break;
 				}
-				MetricTimer timer = null;
-				MetricInstance metrics = pipeline.getServer().getMetrics();
-				if (metrics != null) {
-					timer = metrics.start(PROCESS_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()));
+				R response;
+				try {
+					MessageProcessor<T, R> processor = pipeline.getMessageProcessorFactory().newProcessor(request);
+					if (processor == null) {
+						throw new IllegalArgumentException("There is no processor for the request");
+					}
+					MetricTimer timer = null;
+					MetricInstance metrics = pipeline.getServer().getMetrics();
+					if (metrics != null) {
+						timer = metrics.start(PROCESS_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()));
+					}
+					response = processor.process(pipeline.getSecurityContext(), pipeline.getSourceContext(), request);
+					if (timer != null) {
+						timer.stop();
+					}
 				}
-				response = processor.process(pipeline.getSecurityContext(), pipeline.getSourceContext(), request);
-				if (timer != null) {
-					timer.stop();
+				catch (Exception e) {
+					response = pipeline.getExceptionFormatter().format(request, e);
 				}
-			}
-			catch (Exception e) {
-				response = pipeline.getExceptionFormatter().format(request, e);
-			}
-			if (response != null) {
-				pipeline.getResponseQueue().add(response);
+				if (response != null) {
+					pipeline.getResponseQueue().add(response);
+				}
 			}
 		}
-		PipelineUtils.setPipelineForThread(null);
+		finally {
+			PipelineUtils.setPipelineForThread(null);
+		}
 	}
 
 }

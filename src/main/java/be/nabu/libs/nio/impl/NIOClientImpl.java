@@ -101,27 +101,33 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 	        				finalizers.add(clientChannel);
 		        			submitIOTask(new Runnable() {
 		        				public void run() {
-		        					try {
-		        						logger.debug("Finalizing accepted connection to: {}", clientChannel.getRemoteAddress());
-				        				// finalize the connection
-				            			while (clientChannel.isConnectionPending() || !clientChannel.finishConnect()) {
-				            				clientChannel.finishConnect();
-				            			}
-				            			PipelineFuture pipelineFuture = futures.get(clientChannel);
-				            			if (pipelineFuture != null) {
+		        					PipelineFuture pipelineFuture = futures.get(clientChannel);
+		        					if (pipelineFuture == null) {
+		        						logger.warn("Unknown channel: " + clientChannel);
+		        						try {
+		        							clientChannel.close();
+		        						}
+		        						catch (Exception e) {
+		        							logger.warn("Could not close unknown channel", e);
+		        						}
+		        					}
+		        					else {
+			        					try {
+			        						logger.debug("Finalizing accepted connection to: {}", clientChannel.getRemoteAddress());
+					        				// finalize the connection
+					            			while (clientChannel.isConnectionPending() || !clientChannel.finishConnect()) {
+					            				clientChannel.finishConnect();
+					            			}
 				            				logger.debug("Realizing {}", pipelineFuture);
 				            				pipelineFuture.unstage();
-				            			}
-				            			else {
-				            				logger.warn("Unknown channel: " + clientChannel);
-				            			}
-		        					}
-		        					catch (Exception e) {
-		        						logger.error("Could not finalize connection", e);
-		        						throw new RuntimeException(e);
-		        					}
-		        					finally {
-		        						finalizers.remove(clientChannel);
+			        					}
+			        					catch (Exception e) {
+			        						logger.warn("Could not finalize connection", e);
+			        						pipelineFuture.fail(e);
+			        					}
+			        					finally {
+			        						finalizers.remove(clientChannel);
+			        					}
 		        					}
 		        				}
 		        			});
@@ -161,6 +167,11 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 		}
 	}
 
+	public void pruneConnections() {
+		super.pruneConnections();
+		lastPrune = new Date();
+	}
+	
 	@Override
 	public void stop() {
 		started = false;
@@ -184,6 +195,7 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 
 		private Pipeline response, stage;
 		private CountDownLatch latch = new CountDownLatch(1);
+		private Throwable exception;
 		
 		@Override
 		public boolean cancel(boolean mayInterruptIfRunning) {
@@ -213,7 +225,12 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 		@Override
 		public Pipeline get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
 			if (latch.await(timeout, unit)) {
-                return response;
+				if (response == null) {
+					throw new ExecutionException("No response found", exception);
+				}
+				else {
+					return response;
+				}
             }
 			else {
                 throw new TimeoutException();
@@ -239,6 +256,11 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 			if (((MessagePipelineImpl<?, ?>) response).isUseSsl()) {
 				((MessagePipelineImpl<?, ?>) response).startHandshake();
 			}
+			latch.countDown();
+		}
+		
+		public void fail(Throwable exception) {
+			this.exception = exception;
 			latch.countDown();
 		}
 		
