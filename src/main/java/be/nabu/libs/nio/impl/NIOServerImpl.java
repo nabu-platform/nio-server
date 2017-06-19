@@ -218,11 +218,11 @@ public class NIOServerImpl implements NIOServer {
 		        		else {
 		        			SocketChannel clientChannel = (SocketChannel) key.channel();
 		        			if (!channels.containsKey(clientChannel)) {
-		        				logger.warn("No channel, cancelling key for: {}", clientChannel.socket());
+		        				logger.debug("No channel, cancelling key for: {}", clientChannel.socket());
 		        				close(key);
 		        			}
 		        			else if (!key.isValid() || !clientChannel.isConnected() || !clientChannel.isOpen() || clientChannel.socket().isInputShutdown()) {
-		        				logger.warn("Disconnected, cancelling key for: {}", clientChannel.socket());
+		        				logger.debug("Disconnected, cancelling key for: {}", clientChannel.socket());
 		        				Pipeline pipeline = channels.get(clientChannel);
 		        				if (pipeline != null) {
 									pipeline.close();
@@ -297,7 +297,7 @@ public class NIOServerImpl implements NIOServer {
 						next.getValue().close();
 					}
 					catch (IOException e) {
-						logger.warn("Can not close connection", e);
+						logger.debug("Can not close connection", e);
 					}
 					iterator.remove();
 				}

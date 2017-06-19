@@ -1,6 +1,7 @@
 package be.nabu.libs.nio.impl;
 
 import java.io.IOException;
+import java.net.StandardSocketOptions;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
@@ -30,7 +31,8 @@ import be.nabu.libs.nio.api.PipelineWithMetaData;
 
 public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 
-	private boolean started;
+	private boolean keepAlive = true;
+	private volatile boolean started;
 	private NIOConnector connector;
 	private List<Runnable> runnables = Collections.synchronizedList(new ArrayList<Runnable>());
 	private Map<SocketChannel, PipelineFuture> futures = Collections.synchronizedMap(new HashMap<SocketChannel, PipelineFuture>());
@@ -54,22 +56,36 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 			@Override
 			public void run() {
 				try {
-					logger.debug("Connecting to {}:{}", host, port);
-					SocketChannel channel = getConnector().connect(NIOClientImpl.this, host, port);
-					futures.put(channel, future);
-					SelectionKey key = channel.register(selector, SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
-				    Pipeline pipeline = getPipelineFactory().newPipeline(NIOClientImpl.this, key);
-				    synchronized (channels) {
-				    	channels.put(channel, pipeline);
-				    }
-				    if (pipeline instanceof PipelineWithMetaData) {
-				    	((PipelineWithMetaData) pipeline).getMetaData().put("host", host);
-				    	((PipelineWithMetaData) pipeline).getMetaData().put("port", port);
-				    }
-				    getConnector().tunnel(NIOClientImpl.this, host, port, pipeline);
-				    future.setResponse(pipeline);
+					if (!future.isCancelled()) {
+						logger.debug("Connecting to {}:{}", host, port);
+						SocketChannel channel = getConnector().connect(NIOClientImpl.this, host, port);
+						// this will send a TCP level keep alive message
+						// the interval and other settings are OS-specific
+						// note: it may not be supported on all operating systems
+						if (keepAlive) {
+							try {
+								channel.setOption(StandardSocketOptions.SO_KEEPALIVE, true);
+							}
+							catch (Exception e) {
+								logger.warn("Failed to set SO_KEEPALIVE", e);
+							}
+						}
+						futures.put(channel, future);
+						SelectionKey key = channel.register(selector, SelectionKey.OP_CONNECT | SelectionKey.OP_READ);
+					    Pipeline pipeline = getPipelineFactory().newPipeline(NIOClientImpl.this, key);
+					    synchronized (channels) {
+					    	channels.put(channel, pipeline);
+					    }
+					    if (pipeline instanceof PipelineWithMetaData) {
+					    	((PipelineWithMetaData) pipeline).getMetaData().put("host", host);
+					    	((PipelineWithMetaData) pipeline).getMetaData().put("port", port);
+					    }
+					    getConnector().tunnel(NIOClientImpl.this, host, port, pipeline);
+					    future.setResponse(pipeline);
+					}
 				}
 				catch (Exception e) {
+					future.cancel(true);
 					throw new RuntimeException(e);
 				}
 			}
@@ -81,16 +97,22 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 
 	@Override
 	public void start() throws IOException {
-		started = true;
-		
 		selector = Selector.open();
+
+		started = true;
 		while (started) {
 			selector.select(10000);
 			if (started) {
+				List<Runnable> runnables = new ArrayList<Runnable>(this.runnables);
+				this.runnables.removeAll(runnables);
 				for (Runnable callable : runnables) {
-					callable.run();
+					try {
+						callable.run();
+					}
+					catch (Exception e) {
+						logger.error("Could not run outstanding runnable", e);
+					}
 				}
-				runnables.clear();
 				Set<SelectionKey> selectedKeys = selector.selectedKeys();
 	        	Iterator<SelectionKey> iterator = selectedKeys.iterator();
 	        	while (iterator.hasNext()) {
@@ -196,15 +218,36 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 		private Pipeline response, stage;
 		private CountDownLatch latch = new CountDownLatch(1);
 		private Throwable exception;
+		private boolean cancelled;
 		
 		@Override
 		public boolean cancel(boolean mayInterruptIfRunning) {
-			return false;
+			if (response != null) {
+				try {
+					response.close();
+				}
+				catch (Exception e) {
+					// ignore
+					logger.debug("Could not close cancelled pipeline future", e);
+				}
+			}
+			if (stage != null) {
+				try {
+					stage.close();
+				}
+				catch (Exception e) {
+					// ignore
+					logger.debug("Could not close cancelled pipeline future", e);
+				}
+			}
+			cancelled = true;
+			latch.countDown();
+			return cancelled;
 		}
 
 		@Override
 		public boolean isCancelled() {
-			return false;
+			return cancelled;
 		}
 
 		@Override
