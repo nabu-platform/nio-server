@@ -271,11 +271,24 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		}
 	}
 	
-	public void startHandshake() throws IOException {
+	public Future<?> startHandshake() throws IOException {
 		if (sslContainer == null) {
 			throw new IllegalStateException("Not a secure container");
 		}
-		((SSLSocketByteContainer) sslContainer).shakeHands();
+		// we must start the handshake while blocking read() actions until it is done, otherwise the request framer might kick in on incoming handshake data
+		futureRead = server.submitIOTask(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					((SSLSocketByteContainer) sslContainer).shakeHands();
+				}
+				catch (IOException e) {
+					logger.error("Could not finish handshake", e);
+					close();
+				}
+			}
+		});
+		return futureRead;
 	}
 	
 	public void startTls(SSLContext context, SSLServerMode mode) throws SSLException {

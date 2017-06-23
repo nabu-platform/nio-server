@@ -148,6 +148,7 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 			        						pipelineFuture.fail(e);
 			        					}
 			        					finally {
+			        						futures.remove(clientChannel);
 			        						finalizers.remove(clientChannel);
 			        					}
 		        					}
@@ -167,6 +168,10 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 	    				}
 	    				else {
 	    					close(key);
+	    				}
+	    				PipelineFuture remove = futures.remove(clientChannel);
+	    				if (remove != null) {
+	    					remove.cancel(true);
 	    				}
 	        		}
 	        		else {
@@ -230,6 +235,7 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 					// ignore
 					logger.debug("Could not close cancelled pipeline future", e);
 				}
+				response = null;
 			}
 			if (stage != null) {
 				try {
@@ -239,6 +245,7 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 					// ignore
 					logger.debug("Could not close cancelled pipeline future", e);
 				}
+				stage = null;
 			}
 			cancelled = true;
 			latch.countDown();
@@ -252,7 +259,7 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 
 		@Override
 		public boolean isDone() {
-			return response != null;
+			return latch.getCount() == 0 && response != null;
 		}
 
 		@Override
@@ -295,9 +302,15 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 			if (this.stage == null) {
 				throw new IllegalStateException("No staged value");
 			}
-			this.response = this.stage;
-			if (((MessagePipelineImpl<?, ?>) response).isUseSsl()) {
-				((MessagePipelineImpl<?, ?>) response).startHandshake();
+			try {
+				if (((MessagePipelineImpl<?, ?>) stage).isUseSsl()) {
+					Future<?> handshake = ((MessagePipelineImpl<?, ?>) stage).startHandshake();
+					handshake.get(30, TimeUnit.SECONDS);
+				}
+				this.response = this.stage;
+			}
+			catch (Exception e) {
+				this.exception = e;
 			}
 			latch.countDown();
 		}
