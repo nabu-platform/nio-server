@@ -304,7 +304,7 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 		
 		public void fail(Throwable exception) {
 			this.exception = exception;
-			latch.countDown();
+			cancel(true);
 		}
 		
 		public String toString() {
