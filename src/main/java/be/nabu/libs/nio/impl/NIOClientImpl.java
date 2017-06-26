@@ -135,13 +135,19 @@ public class NIOClientImpl extends NIOServerImpl implements NIOClient {
 		        					}
 		        					else {
 			        					try {
-			        						logger.debug("Finalizing accepted connection to: {}", clientChannel.getRemoteAddress());
-					        				// finalize the connection
-					            			while (clientChannel.isConnectionPending() || !clientChannel.finishConnect()) {
-					            				clientChannel.finishConnect();
-					            			}
-				            				logger.debug("Realizing {}", pipelineFuture);
-				            				pipelineFuture.unstage();
+			        						if (pipelineFuture.isCancelled()) {
+				        						// cancel again to make sure we close any remaining pipelines
+				        						pipelineFuture.cancel(true);
+				        					}
+			        						else {
+				        						logger.debug("Finalizing accepted connection to: {}", clientChannel.getRemoteAddress());
+						        				// finalize the connection
+						            			while (clientChannel.isConnectionPending() || !clientChannel.finishConnect()) {
+						            				clientChannel.finishConnect();
+						            			}
+					            				logger.debug("Realizing {}", pipelineFuture);
+					            				pipelineFuture.unstage();
+			        						}
 			        					}
 			        					catch (Exception e) {
 			        						logger.warn("Could not finalize connection", e);
