@@ -2,6 +2,7 @@ package be.nabu.libs.nio.api;
 
 import java.io.Closeable;
 import java.util.Date;
+import java.util.Map;
 
 /**
  * A data pipeline is a two way pipeline where data can arrive from an external source or be sent to an external source
@@ -50,4 +51,8 @@ public interface Pipeline extends Closeable {
 	 * When the pipeline last saw outgoing data (indicating outgoing activity)
 	 */
 	public Date getLastWritten();
+	/**
+	 * A generic context container where you can store things linked to the pipeline
+	 */
+	public Map<String, Object> getContext();
 }

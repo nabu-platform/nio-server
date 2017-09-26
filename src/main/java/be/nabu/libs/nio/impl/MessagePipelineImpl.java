@@ -75,6 +75,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private long readTimeout, writeTimeout;
 	private int requestLimit, responseLimit;
 	private Map<String, Object> metaData = Collections.synchronizedMap(new HashMap<String, Object>());
+	private Map<String, Object> context = Collections.synchronizedMap(new HashMap<String, Object>());
 	
 	/**
 	 * It is possible that this pipeline replaced an existing pipeline (for example after a connection upgrade or a live protocol switch)
@@ -291,6 +292,20 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		return futureRead;
 	}
 	
+	public void shakeHands() {
+		if (sslContainer == null) {
+			throw new IllegalStateException("Not a secure container");
+		}
+		try {
+			((SSLSocketByteContainer) sslContainer).shakeHands();
+		}
+		catch (IOException e) {
+			logger.error("Could not finish handshake", e);
+			close();
+			throw new RuntimeException(e);
+		}
+	}
+	
 	public void startTls(SSLContext context, SSLServerMode mode) throws SSLException {
 		if (sslContainer == null) {
 			sslContainer = new SSLSocketByteContainer(container, context, mode);
@@ -490,5 +505,9 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	public Container<ByteBuffer> getContainer() {
 		return container;
 	}
-	
+
+	@Override
+	public Map<String, Object> getContext() {
+		return context;
+	}
 }

@@ -105,6 +105,14 @@ public class NIOServerImpl implements NIOServer {
 		return processExecutors.submit(runnable);
 	}
 	
+	protected ExecutorService getIoExecutors() {
+		return ioExecutors;
+	}
+
+	protected ExecutorService getProcessExecutors() {
+		return processExecutors;
+	}
+
 	@Override
 	public void close(SelectionKey selectionKey) {
 		try {
