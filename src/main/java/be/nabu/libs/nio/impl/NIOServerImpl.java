@@ -115,8 +115,8 @@ public class NIOServerImpl implements NIOServer {
 
 	@Override
 	public void close(SelectionKey selectionKey) {
-		try {
-			if (selectionKey != null) {
+		if (selectionKey != null) {
+			try {
 				selectionKey.cancel();
 				if (channels.containsKey(selectionKey.channel())) {
 					Pipeline removed;
@@ -128,13 +128,13 @@ public class NIOServerImpl implements NIOServer {
 					}
 				}
 			}
-		}
-		finally {
-			try {
-				selectionKey.channel().close();
-			}
-			catch (IOException e) {
-				logger.error("Failed to close the channel", e);
+			finally {
+				try {
+					selectionKey.channel().close();
+				}
+				catch (IOException e) {
+					logger.error("Failed to close the channel", e);
+				}
 			}
 		}
 	}

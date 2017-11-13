@@ -510,4 +510,9 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	public Map<String, Object> getContext() {
 		return context;
 	}
+
+	public SelectionKey getSelectionKey() {
+		return selectionKey;
+	}
+	
 }
