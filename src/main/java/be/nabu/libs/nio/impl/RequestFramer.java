@@ -52,6 +52,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		pipeline.putMDCContext();
 		T request = null;
 		boolean closeConnection = false;
+		long originalBufferSize = 0, newBufferSize = 0, originalCount = 0, newCount = 0;
 		try {
 			if (framer == null) {
 				framer = pipeline.getRequestParserFactory().newMessageParser();
@@ -64,7 +65,12 @@ public class RequestFramer<T> implements Runnable, Closeable {
 					timer = metrics.start(PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()));
 				}
 			}
+			originalBufferSize = readable.getBufferSize();
+			originalCount = counting.getReadTotal();
 			framer.push(readable);
+			newBufferSize = readable.getBufferSize();
+			newCount = counting.getReadTotal();
+			
 			if (framer.isClosed()) {
 				closeConnection = true;
 			}
@@ -111,7 +117,9 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				logger.error("Failed to close connection", e);
 			}
 		}
-		else if (pipeline.rescheduleRead()) {
+		// if the buffer sizes don't match, _something_ changed, either there is new data or data disappeared to form a message
+		// if the buffer size remains the same and > 0, there is a partial message (or garbage) in there and we don't want to keep scheduling reads
+		else if (pipeline.rescheduleRead() || (originalCount != newCount) || (originalBufferSize != newBufferSize)) {
 			pipeline.read(true);
 		}
 	}

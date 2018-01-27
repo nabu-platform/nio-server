@@ -216,18 +216,38 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	}
 	
 	public void process() {
-		process(false);
+		process(false, true);
 	}
 
-	void process(boolean force) {
+	void process(boolean force, boolean submitChecker) {
 		lastProcessed = new Date();
+		boolean submitted = false;
 		if (force || futureProcess == null || futureProcess.isDone()) {
 			synchronized(this) {
 				if (force || futureProcess == null || futureProcess.isDone()) {
 					futureProcess = server.submitProcessTask(requestProcessor);
+					submitted = true;
 				}
 			}
 		}
+		if (!submitted && submitChecker) {
+			checkForWaiting();
+		}
+	}
+
+	public void checkForWaiting() {
+		// if requests are coming in _really_ fast (e.g. burst of websocket messages)
+		// it is possible that between ending the processing while loop (and running the finally) during which the future is not yet done, something new is pushed to the queue
+		// this queue push will check that something is running and it still is and not submit a new one
+		// we need something that runs _after_ this future is resolved that can check if new messages were returned
+		server.submitProcessTask(new Runnable() {
+			@Override
+			public void run() {
+				if (!getRequestQueue().isEmpty()) {
+					process(false, false);
+				}
+			}
+		});
 	}
 
 	/**
