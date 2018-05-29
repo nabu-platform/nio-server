@@ -20,7 +20,7 @@ import be.nabu.utils.io.containers.CountingWritableContainerImpl;
 
 public class ResponseWriter<T> implements Closeable, Runnable {
 
-	public static final int BUFFER_SIZE = 8192;
+	public static final int BUFFER_SIZE = 8192 * 2;
 	public static final String FORMAT_TIME = "formatTime";
 	public static final String RESPONSE_SIZE = "responseSize";
 	public static final String TRANSFER_RATE = "responseTransferRate";
