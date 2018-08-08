@@ -346,6 +346,12 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			}
 			@Override
 			public SSLContext getSSLContext() {
+				// if we have an ssl container (we should), use that context
+				// we now allow the security context in the server to be updated dynamically but this is not (yet?) supported by pipelines who will continue to see the original context
+				// hence the ssl container is more accurate
+				if (sslContainer != null) {
+					return sslContainer.getContext();
+				}
 				return server.getSSLContext();
 			}
 			@Override

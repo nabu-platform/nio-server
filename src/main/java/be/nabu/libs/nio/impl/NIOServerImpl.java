@@ -316,6 +316,11 @@ public class NIOServerImpl implements NIOServer {
 	public SSLContext getSSLContext() {
 		return sslContext;
 	}
+	
+	// you can update the ssl context
+	public void setSSLContext(SSLContext sslContext) {
+		this.sslContext = sslContext;
+	}
 
 	public SSLServerMode getSSLServerMode() {
 		return sslServerMode == null ? SSLServerMode.NO_CLIENT_CERTIFICATES : sslServerMode;
