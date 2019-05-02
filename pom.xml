@@ -33,6 +33,10 @@
 			<artifactId>utils-io</artifactId>
 		</dependency>
 		<dependency>
+			<groupId>be.nabu.utils</groupId>
+			<artifactId>utils-cep</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>be.nabu.libs.events</groupId>
 			<artifactId>events-api</artifactId>
 		</dependency>

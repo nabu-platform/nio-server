@@ -17,7 +17,8 @@ public class RequestProcessor<T, R> implements Runnable {
 	
 	@Override
 	public void run() {
-		pipeline.putMDCContext();
+		// GDPR
+//		pipeline.putMDCContext();
 		PipelineUtils.setPipelineForThread(pipeline);
 		try {
 			while(!Thread.interrupted()) {

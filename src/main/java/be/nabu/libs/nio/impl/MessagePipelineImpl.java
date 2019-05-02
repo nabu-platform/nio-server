@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLException;
@@ -36,6 +37,7 @@ import be.nabu.libs.nio.api.UpgradeableMessagePipeline;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.libs.nio.impl.udp.UDPChannel;
+import be.nabu.utils.cep.impl.CEPUtils;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.SSLServerMode;
 import be.nabu.utils.io.api.ByteBuffer;
@@ -302,9 +304,14 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			public void run() {
 				try {
 					((SSLSocketByteContainer) sslContainer).shakeHands();
+					Long handshakeDuration = ((SSLSocketByteContainer) sslContainer).getHandshakeDuration();
+					if (handshakeDuration != null && getServer().getMetrics() != null) {
+						getServer().getMetrics().duration("handshake", handshakeDuration, TimeUnit.MILLISECONDS);
+					}
 				}
 				catch (IOException e) {
 					logger.error("Could not finish handshake", e);
+					getServer().fire(CEPUtils.newServerNetworkEvent(getClass(), "handshake", getSourceContext().getSocketAddress(), "Writing failed", e), getServer());					
 					close();
 				}
 			}
@@ -318,9 +325,14 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		}
 		try {
 			((SSLSocketByteContainer) sslContainer).shakeHands();
+			Long handshakeDuration = ((SSLSocketByteContainer) sslContainer).getHandshakeDuration();
+			if (handshakeDuration != null && getServer().getMetrics() != null) {
+				getServer().getMetrics().duration("handshake", handshakeDuration, TimeUnit.MILLISECONDS);
+			}
 		}
 		catch (IOException e) {
 			logger.error("Could not finish handshake", e);
+			getServer().fire(CEPUtils.newServerNetworkEvent(getClass(), "handshake", getSourceContext().getSocketAddress(), "Writing failed", e), getServer());
 			close();
 			throw new RuntimeException(e);
 		}

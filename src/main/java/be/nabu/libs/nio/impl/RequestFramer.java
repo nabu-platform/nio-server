@@ -11,6 +11,9 @@ import org.slf4j.LoggerFactory;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
 import be.nabu.libs.nio.api.MessageParser;
+import be.nabu.utils.cep.api.EventSeverity;
+import be.nabu.utils.cep.impl.CEPUtils;
+import be.nabu.utils.cep.impl.NetworkedComplexEventImpl;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.ReadableContainer;
@@ -49,7 +52,8 @@ public class RequestFramer<T> implements Runnable, Closeable {
 
 	@Override
 	public void run() {
-		pipeline.putMDCContext();
+		// we don't put the context anymore to avoid GDPR issues with logging addresses
+		//pipeline.putMDCContext();
 		T request = null;
 		boolean closeConnection = false;
 		long originalBufferSize = 0, newBufferSize = 0, originalCount = 0, newCount = 0;
@@ -94,6 +98,13 @@ public class RequestFramer<T> implements Runnable, Closeable {
 			}
 			else if (started != null && pipeline.getReadTimeout() > 0 && started.getTime() < new Date().getTime() - pipeline.getReadTimeout()) {
 				logger.warn("Read timed out, started at {} with a timeout value of {}", started, pipeline.getReadTimeout());
+				
+				NetworkedComplexEventImpl event = CEPUtils.newServerNetworkEvent(getClass(), "request-parse-timeout", pipeline.getSourceContext().getSocketAddress());
+				event.setStarted(started);
+				event.setStopped(new Date());
+				event.setSeverity(EventSeverity.WARNING);
+				pipeline.getServer().fire(event, pipeline.getServer());
+				
 				pipeline.close();
 			}
 			if (request != null) {
@@ -108,6 +119,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		catch (Exception e) {
 			closeConnection = true;
 			logger.error("Could not process incoming data", e);
+			pipeline.getServer().fire(CEPUtils.newServerNetworkEvent(getClass(), "request-parse", pipeline.getSourceContext().getSocketAddress(), "Could not process incoming data", e), pipeline.getServer());
 		}
 		if (closeConnection) {
 			try {
@@ -115,6 +127,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 			}
 			catch (IOException e) {
 				logger.error("Failed to close connection", e);
+				pipeline.getServer().fire(CEPUtils.newServerNetworkEvent(getClass(), "connection-close", pipeline.getSourceContext().getSocketAddress(), "Failed to close connection", e), pipeline.getServer());
 			}
 		}
 		// if the buffer sizes don't match, _something_ changed, either there is new data or data disappeared to form a message

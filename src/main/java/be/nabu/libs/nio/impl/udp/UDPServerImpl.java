@@ -24,6 +24,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import be.nabu.libs.events.api.EventDispatcher;
+import be.nabu.libs.events.api.EventTarget;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.nio.api.ConnectionAcceptor;
 import be.nabu.libs.nio.api.NIODebugger;
@@ -50,6 +51,7 @@ public class UDPServerImpl implements NIOServer {
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private NIODebugger debugger;
 	private boolean stopping;
+	private EventTarget eventTarget;
 
 	public UDPServerImpl(int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.port = port;
@@ -239,5 +241,18 @@ public class UDPServerImpl implements NIOServer {
 	public boolean isRunning() {
 		return channel != null;
 	}
-	
+
+	public EventTarget getEventTarget() {
+		return eventTarget;
+	}
+	public void setEventTarget(EventTarget eventTarget) {
+		this.eventTarget = eventTarget;
+	}
+
+	@Override
+	public <E> void fire(E event, Object source) {
+		if (eventTarget != null) {
+			eventTarget.fire(event, source);
+		}
+	}
 }

@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import be.nabu.libs.events.api.EventDispatcher;
+import be.nabu.libs.events.api.EventTarget;
 import be.nabu.libs.metrics.api.MetricGauge;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.nio.api.ConnectionAcceptor;
@@ -39,6 +40,9 @@ import be.nabu.libs.nio.api.PipelineFactory;
 import be.nabu.libs.nio.api.PipelineState;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
+import be.nabu.utils.cep.api.EventSeverity;
+import be.nabu.utils.cep.impl.CEPUtils;
+import be.nabu.utils.cep.impl.NetworkedComplexEventImpl;
 import be.nabu.utils.io.SSLServerMode;
 
 /**
@@ -79,6 +83,9 @@ public class NIOServerImpl implements NIOServer {
 	private PipelineFactory pipelineFactory;
 	private ConnectionAcceptor connectionAcceptor;
 	private EventDispatcher dispatcher;
+	
+	// this is the dispatcher used for low level events
+	private EventTarget eventTarget;
 	
 	// by default an idle connection will time out after 5 minutes and even active connections will be dropped after 1 hour expecting a reconnect if necessary
 	private Long maxIdleTime = 5l*60*1000, maxLifeTime = 60l*1000*60;
@@ -182,11 +189,22 @@ public class NIOServerImpl implements NIOServer {
 		        			SocketChannel clientSocketChannel = serverSocketChannel.accept();
 		        			MetricInstance metrics = this.metrics;
 		        			if (clientSocketChannel != null) {
+		        				NetworkedComplexEventImpl event = null;
+		        				if (eventTarget != null) {
+		        					InetSocketAddress socketAddress = (InetSocketAddress) clientSocketChannel.getRemoteAddress();
+		        					event = CEPUtils.newServerNetworkEvent(getClass(), "server-connect", socketAddress);
+		        					event.setDestinationPort(port);
+		        				}
 		        				if (connectionAcceptor != null && !connectionAcceptor.accept(this, clientSocketChannel)) {
 		        					logger.warn("Connection rejected: " + clientSocketChannel.socket());
 		        					if (metrics != null) {
 										metrics.increment(METRIC_REJECTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket().getRemoteSocketAddress()), 1l);
 									}
+		        					if (event != null) {
+		        						event.setEventName("server-reject");
+		        						event.setSeverity(EventSeverity.WARNING);
+		        						eventTarget.fire(event, this);
+		        					}
 		        					dispatcher.fire(new ConnectionEventImpl(this, null, ConnectionEvent.ConnectionState.REJECTED), this);
 		        					clientSocketChannel.close();
 		        				}
@@ -211,12 +229,18 @@ public class NIOServerImpl implements NIOServer {
 													if (metrics != null) {
 														metrics.increment(METRIC_ACCEPTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket().getRemoteSocketAddress()), 1l);
 													}
+													if (event != null) {
+						        						eventTarget.fire(event, this);
+						        					}
 													dispatcher.fire(new ConnectionEventImpl(this, newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);
 					                        	}
 					                        }
 			                        	}
 			                        	catch (IOException e) {
 			                        		logger.error("Failed pipeline", e);
+			                        		if (event != null) {
+				        						eventTarget.fire(CEPUtils.enrich(event, e), this);
+				        					}
 			                        		clientSocketChannel.close();
 			                        	}
 			                        }
@@ -515,4 +539,19 @@ public class NIOServerImpl implements NIOServer {
 	public void setDebugger(NIODebugger debugger) {
 		this.debugger = debugger;
 	}
+	
+	public EventTarget getEventTarget() {
+		return eventTarget;
+	}
+	public void setEventTarget(EventTarget eventTarget) {
+		this.eventTarget = eventTarget;
+	}
+
+	@Override
+	public <E> void fire(E event, Object source) {
+		if (eventTarget != null) {
+			eventTarget.fire(event, source);
+		}
+	}
+	
 }

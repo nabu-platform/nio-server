@@ -12,6 +12,9 @@ import org.slf4j.LoggerFactory;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
 import be.nabu.libs.nio.api.MessageFormatter;
+import be.nabu.utils.cep.api.EventSeverity;
+import be.nabu.utils.cep.impl.CEPUtils;
+import be.nabu.utils.cep.impl.NetworkedComplexEventImpl;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
 import be.nabu.utils.io.api.ReadableContainer;
@@ -56,7 +59,8 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 
 	@Override
 	public void run() {
-		pipeline.putMDCContext();
+		// GDPR concerns for ips
+//		pipeline.putMDCContext();
 		// either it's a socketchannel and connected, or the channel is at least open
 		boolean open = (pipeline.getChannel() instanceof SocketChannel && ((SocketChannel) pipeline.getChannel()).isConnected())
 			|| (!(pipeline.getChannel() instanceof SocketChannel) && pipeline.getChannel().isOpen());
@@ -78,6 +82,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			}
 			catch (Exception e) {
 				logger.error("Writing failed", e);
+				pipeline.getServer().fire(CEPUtils.newServerNetworkEvent(getClass(), "response-write", pipeline.getSourceContext().getSocketAddress(), "Writing failed", e), pipeline.getServer());
 			}
 		}
 	}
@@ -139,6 +144,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 					readable = messageFormatter.format(response);
 				}
 				keepAlive = false;
+				pipeline.getServer().fire(CEPUtils.newServerNetworkEvent(getClass(), "response-format", pipeline.getSourceContext().getSocketAddress(), "Could not format response", e), pipeline.getServer());
 			}
 		}
 		return true;
@@ -189,6 +195,13 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			if (buffer.remainingData() > 0 || readable != null) {
 				if (started != null && pipeline.getWriteTimeout() > 0 && started.getTime() < new Date().getTime() - pipeline.getWriteTimeout()) {
 					logger.warn("Write timed out, started at {} with a timeout value of {}", started, pipeline.getWriteTimeout());
+					
+					NetworkedComplexEventImpl event = CEPUtils.newServerNetworkEvent(getClass(), "response-write-timeout", pipeline.getSourceContext().getSocketAddress());
+					event.setStarted(started);
+					event.setStopped(new Date());
+					event.setSeverity(EventSeverity.WARNING);
+					pipeline.getServer().fire(event, pipeline.getServer());
+					
 					pipeline.close();
 				}
 				else {
