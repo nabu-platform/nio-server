@@ -9,6 +9,8 @@ public interface ConnectionEvent {
 		CONNECTED,
 		REJECTED,
 		CLOSED,
+		// after the connection has been closed and no additional data in the input, we send out an empty event 
+		EMPTY,
 		UPGRADED
 	}
 	

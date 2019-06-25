@@ -159,6 +159,17 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		initMetadata();
 	}
 	
+	public void drainOutput() {
+		responseWriter.drain();
+		// could be that you're already writing or that you need to start writing specifically to close it
+		write();
+	}
+	
+	public void drainInput() {
+		requestFramer.drain();
+		read();
+	}
+	
 	private void initMetadata() {
 		if (remoteAddress == null) {
 			if (getChannel() instanceof SocketChannel) {
@@ -441,6 +452,10 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	
 	void putMDCContext() {
 		MDC.put("socket", getChannel() instanceof SocketChannel ? ((SocketChannel) getChannel()).socket().toString() : ((UDPChannel) getChannel()).getTarget().toString());
+	}
+	
+	public Future<?> getProcessFuture() {
+		return futureProcess;
 	}
 
 	@Override

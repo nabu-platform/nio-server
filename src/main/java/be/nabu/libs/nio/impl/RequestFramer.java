@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
 import be.nabu.libs.nio.api.MessageParser;
+import be.nabu.libs.nio.api.events.ConnectionEvent;
+import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.utils.cep.api.EventSeverity;
 import be.nabu.utils.cep.impl.CEPUtils;
 import be.nabu.utils.cep.impl.NetworkedComplexEventImpl;
@@ -37,6 +39,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	private MetricTimer timer;
 	private Date started;
 	private EOFReadableContainer<ByteBuffer> eof;
+	private volatile boolean closeWhenDone = false;
 
 	RequestFramer(MessagePipelineImpl<T, ?> pipeline, ReadableContainer<ByteBuffer> readable) {
 		this.pipeline = pipeline;
@@ -47,6 +50,8 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	
 	@Override
 	public void close() throws IOException {
+		// it might already have been closed by the remote party, but now we are also of the opinion that everything has been processed
+		pipeline.getServer().getDispatcher().fire(new ConnectionEventImpl(pipeline.getServer(), pipeline, ConnectionEvent.ConnectionState.EMPTY), this);
 		pipeline.close();
 	}
 
@@ -80,6 +85,9 @@ public class RequestFramer<T> implements Runnable, Closeable {
 			}
 			// if we encountered an end of file and nothing was read, close the connection
 			else if (eof.isEOF() && counting.getReadTotal() == 0) {
+				closeConnection = true;
+			}
+			else if (closeWhenDone) {
 				closeConnection = true;
 			}
 			if (framer.isDone()) {
@@ -139,5 +147,9 @@ public class RequestFramer<T> implements Runnable, Closeable {
 
 	public long remainingData() {
 		return readable.getBufferSize();
+	}
+	
+	public void drain() {
+		closeWhenDone = true;
 	}
 }

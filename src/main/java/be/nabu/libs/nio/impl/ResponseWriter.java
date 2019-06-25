@@ -37,10 +37,15 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	private MetricTimer timer;
 	private Date started;
 	private volatile boolean writing = true;
+	private volatile boolean closeWhenEmpty = false;
 	
 	ResponseWriter(MessagePipelineImpl<?, T> pipeline, WritableContainer<ByteBuffer> output) {
 		this.pipeline = pipeline;
 		this.output = new CountingWritableContainerImpl<ByteBuffer>(output);
+	}
+	
+	public void drain() {
+		closeWhenEmpty = true;
 	}
 	
 	@Override
@@ -122,6 +127,12 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			// if no response, the queue is empty
 			if (response == null) {
 				writing = false;
+				// if we want to close when empty and the keepAlive is still set to true
+				// make it seem like we succesfully wrote what we needed to write so we can come right back around and flush and/or close the connection
+				if (closeWhenEmpty && keepAlive) {
+					keepAlive = false;
+					return true;
+				}
 				return false;
 			}
 			else if (metrics != null) {
@@ -131,7 +142,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			output.setWrittenTotal(0);
 			
 			started = new Date();
-			keepAlive = pipeline.getKeepAliveDecider().keepConnectionAlive(response);
+			keepAlive = keepAlive && pipeline.getKeepAliveDecider().keepConnectionAlive(response);
 			
 			MessageFormatter<T> messageFormatter = pipeline.getResponseFormatterFactory().newMessageFormatter();
 			try {

@@ -70,7 +70,7 @@ public class NIOServerImpl implements NIOServer {
 	private int port;
 	protected Selector selector;
 	protected Map<SocketChannel, Pipeline> channels = new ConcurrentHashMap<SocketChannel, Pipeline>();
-	private SSLContext sslContext;
+	private volatile SSLContext sslContext;
 	private MetricInstance metrics;
 	
 	protected Logger logger = LoggerFactory.getLogger(getClass());
@@ -90,16 +90,20 @@ public class NIOServerImpl implements NIOServer {
 	// by default an idle connection will time out after 5 minutes and even active connections will be dropped after 1 hour expecting a reconnect if necessary
 	private Long maxIdleTime = 5l*60*1000, maxLifeTime = 60l*1000*60;
 	private NIODebugger debugger;
-	private boolean stopping;
+	private volatile boolean stopping;
+	private int ioPoolSize;
+	private int processPoolSize;
+	private ThreadFactory threadFactory;
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;
 		this.sslServerMode = sslServerMode;
 		this.port = port;
+		this.ioPoolSize = ioPoolSize;
+		this.processPoolSize = processPoolSize;
 		this.pipelineFactory = pipelineFactory;
 		this.dispatcher = dispatcher;
-		this.ioExecutors = Executors.newFixedThreadPool(ioPoolSize, threadFactory);
-		this.processExecutors = Executors.newFixedThreadPool(processPoolSize, threadFactory);
+		this.threadFactory = threadFactory;
 	}
 	
 	@Override
@@ -153,6 +157,8 @@ public class NIOServerImpl implements NIOServer {
 	
 	@SuppressWarnings("unchecked")
 	public void start() throws IOException {
+		startPools();
+		
 		channel = ServerSocketChannel.open();
 		channel.bind(new InetSocketAddress(port));		// new InetSocketAddress("localhost", port)
 		channel.configureBlocking(false);
@@ -304,6 +310,12 @@ public class NIOServerImpl implements NIOServer {
         	}
         }
 	}
+
+	public void startPools() {
+		// start the pools
+		ioExecutors = Executors.newFixedThreadPool(ioPoolSize, threadFactory);
+		processExecutors = Executors.newFixedThreadPool(processPoolSize, threadFactory);
+	}
 	
 	protected void pruneConnections() {
 		synchronized(channels) {
@@ -324,7 +336,7 @@ public class NIOServerImpl implements NIOServer {
 					|| (maxLifeTime != null && maxLifeTime != 0 && PipelineState.WAITING.equals(next.getValue().getState()) && now.getTime() - next.getValue().getSourceContext().getCreated().getTime() > maxLifeTime)
 					// the connection has exceeded its max idletime
 					|| (maxIdleTime != null && maxIdleTime != 0 && PipelineState.WAITING.equals(next.getValue().getState()) && lastActivity != null && now.getTime() - lastActivity.getTime() > maxIdleTime)) {
-					logger.warn("Pruning connection " + next.getKey() + ": [connected:" + next.getKey().isConnected() + "], [created:" + next.getValue().getSourceContext().getCreated() + "/" + maxLifeTime + "], [lastActivity:" + lastActivity + "/" + maxIdleTime + "]");
+					logger.warn("Pruning connection: [connected:" + next.getKey().isConnected() + "], [created:" + next.getValue().getSourceContext().getCreated() + "/" + maxLifeTime + "], [lastActivity:" + lastActivity + "/" + maxIdleTime + "]");
 					try {
 						next.getValue().close();
 					}
@@ -366,14 +378,6 @@ public class NIOServerImpl implements NIOServer {
 	@Override
 	public void stop() {
 		stopping = true;
-		if (!channels.isEmpty()) {
-			try {
-				closePipelines();
-			}
-			catch (Exception e) {
-				logger.error("Failed to close pipelines", e);
-			}
-		}
 		if (channel != null) {
 			try {
 				channel.close();
@@ -381,6 +385,14 @@ public class NIOServerImpl implements NIOServer {
 			}
 			catch (Exception e) {
 				logger.error("Failed to close server", e);
+			}
+		}
+		if (!channels.isEmpty()) {
+			try {
+				closePipelines();
+			}
+			catch (Exception e) {
+				logger.error("Failed to close pipelines", e);
 			}
 		}
 		if (selector != null) {
@@ -392,7 +404,19 @@ public class NIOServerImpl implements NIOServer {
 				logger.error("Failed to close selector", e);
 			}
 		}
+		shutdownPools();
 		stopping = false;
+	}
+	
+	public void shutdownPools() {
+		if (ioExecutors != null) {
+			ioExecutors.shutdown();
+			ioExecutors = null;
+		}
+		if (processExecutors != null) {
+			processExecutors.shutdown();
+			processExecutors = null;
+		}
 	}
 	
 	public boolean isStopping() {
