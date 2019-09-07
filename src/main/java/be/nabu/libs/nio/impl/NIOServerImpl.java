@@ -79,6 +79,9 @@ public class NIOServerImpl implements NIOServer {
 	protected long pruneInterval = 5000;
 	
 	private ExecutorService ioExecutors, processExecutors;
+	// in some case it is interesting to share executors with others to reduce overhead of pool management and/or explicitly share resources
+	// if they are shared however, they don't need to be started nor stopped by this instance as someone else manages them
+	private boolean executorsShared = false;
 	private SSLServerMode sslServerMode;
 	private PipelineFactory pipelineFactory;
 	private ConnectionAcceptor connectionAcceptor;
@@ -94,6 +97,17 @@ public class NIOServerImpl implements NIOServer {
 	private int ioPoolSize;
 	private int processPoolSize;
 	private ThreadFactory threadFactory;
+	
+	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, ExecutorService ioExecutors, ExecutorService processExecutors, PipelineFactory pipelineFactory, EventDispatcher dispatcher) {
+		this.sslContext = sslContext;
+		this.sslServerMode = sslServerMode;
+		this.port = port;
+		this.ioExecutors = ioExecutors;
+		this.processExecutors = processExecutors;
+		this.pipelineFactory = pipelineFactory;
+		this.dispatcher = dispatcher;
+		this.executorsShared = true;
+	}
 	
 	public NIOServerImpl(SSLContext sslContext, SSLServerMode sslServerMode, int port, int ioPoolSize, int processPoolSize, PipelineFactory pipelineFactory, EventDispatcher dispatcher, ThreadFactory threadFactory) {
 		this.sslContext = sslContext;
@@ -312,9 +326,11 @@ public class NIOServerImpl implements NIOServer {
 	}
 
 	public void startPools() {
-		// start the pools
-		ioExecutors = Executors.newFixedThreadPool(ioPoolSize, threadFactory);
-		processExecutors = Executors.newFixedThreadPool(processPoolSize, threadFactory);
+		if (!executorsShared) {
+			// start the pools
+			ioExecutors = Executors.newFixedThreadPool(ioPoolSize, threadFactory);
+			processExecutors = Executors.newFixedThreadPool(processPoolSize, threadFactory);
+		}
 	}
 	
 	protected void pruneConnections() {
@@ -409,13 +425,15 @@ public class NIOServerImpl implements NIOServer {
 	}
 	
 	public void shutdownPools() {
-		if (ioExecutors != null) {
-			ioExecutors.shutdown();
-			ioExecutors = null;
-		}
-		if (processExecutors != null) {
-			processExecutors.shutdown();
-			processExecutors = null;
+		if (!executorsShared) {
+			if (ioExecutors != null) {
+				ioExecutors.shutdown();
+				ioExecutors = null;
+			}
+			if (processExecutors != null) {
+				processExecutors.shutdown();
+				processExecutors = null;
+			}
 		}
 	}
 	
