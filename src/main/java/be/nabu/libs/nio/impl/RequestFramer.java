@@ -10,7 +10,9 @@ import org.slf4j.LoggerFactory;
 
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
+import be.nabu.libs.nio.PipelineUtils;
 import be.nabu.libs.nio.api.MessageParser;
+import be.nabu.libs.nio.api.StreamingMessageParser;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.utils.cep.api.EventSeverity;
@@ -34,7 +36,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private PushbackContainerImpl<ByteBuffer> readable;
 	private CountingReadableContainerImpl<ByteBuffer> counting;
-	private MessageParser<T> framer;
+	private volatile MessageParser<T> framer;
 	private MessagePipelineImpl<T, ?> pipeline;
 	private MetricTimer timer;
 	private Date started;
@@ -62,6 +64,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		T request = null;
 		boolean closeConnection = false;
 		long originalBufferSize = 0, newBufferSize = 0, originalCount = 0, newCount = 0;
+		PipelineUtils.setPipelineForThread(pipeline);
 		try {
 			if (framer == null) {
 				framer = pipeline.getRequestParserFactory().newMessageParser();
@@ -91,18 +94,21 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				closeConnection = true;
 			}
 			if (framer.isDone()) {
-				if (timer != null) {
-					long timed = timer.stop();
-					String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress());
-					long readSize = counting.getReadTotal() - readable.getBufferSize();
-					long transferRate = readSize / Math.max(1, timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS));
-					timer.getMetrics().log(REQUEST_SIZE + ":" + userId, readSize);
-					timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
-					timer = null;
-					started = null;
-				}
 				request = framer.getMessage();
-				framer = null;
+				// only reset the framer if it is not a streaming one or the stream is done
+				if (!(framer instanceof StreamingMessageParser) || ((StreamingMessageParser<?>) framer).isStreamed()) {
+					if (timer != null) {
+						long timed = timer.stop();
+						String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress());
+						long readSize = counting.getReadTotal() - readable.getBufferSize();
+						long transferRate = readSize / Math.max(1, timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS));
+						timer.getMetrics().log(REQUEST_SIZE + ":" + userId, readSize);
+						timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
+						timer = null;
+						started = null;
+					}
+					framer = null;
+				}
 			}
 			else if (started != null && pipeline.getReadTimeout() > 0 && started.getTime() < new Date().getTime() - pipeline.getReadTimeout()) {
 				logger.warn("Read timed out, started at {} with a timeout value of {}", started, pipeline.getReadTimeout());
@@ -116,18 +122,21 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				pipeline.close();
 			}
 			if (request != null) {
-				logger.trace("Parsed request {}", request);
+				logger.trace("Parsed request {}", request.getClass());
 				pipeline.getRequestQueue().add(request);
 			}
 		}
 		catch (IOException e) {
 			closeConnection = true;
-			logger.debug("Could not process incoming data", e);
+			logger.warn("Could not process incoming data", e);		// TODO: set back to debug? it does have the tendency to hide stuff though...
 		}
 		catch (Exception e) {
 			closeConnection = true;
 			logger.error("Could not process incoming data", e);
 			pipeline.getServer().fire(CEPUtils.newServerNetworkEvent(getClass(), "request-parse", pipeline.getSourceContext().getSocketAddress(), "Could not process incoming data", e), pipeline.getServer());
+		}
+		finally {
+			PipelineUtils.setPipelineForThread(null);
 		}
 		if (closeConnection) {
 			try {

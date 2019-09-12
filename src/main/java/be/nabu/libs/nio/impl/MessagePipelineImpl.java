@@ -90,6 +90,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private boolean debug = Boolean.parseBoolean(System.getProperty("nio.debug.pipeline", "false"));
 	private SocketAddress remoteAddress;
 	private Integer localPort;
+	private volatile boolean shouldRescheduleRead = false;
 	
 	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
 		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null, 0);
@@ -197,6 +198,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		server.setWriteInterest(selectionKey, false);
 	}
 	
+	@Override
 	public void read() {
 		read(false);
 	}
@@ -210,8 +212,12 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 				}
 			}
 		}
+		else {
+			shouldRescheduleRead = true;
+		}
 	}
 	
+	@Override
 	public void write() {
 		write(false);
 	}
@@ -267,7 +273,15 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	 * Tiny hack to reschedule reading of the request framer for udp messages
 	 */
 	boolean rescheduleRead() {
+		if (shouldRescheduleRead) {
+			shouldRescheduleRead = false;
+			return true;
+		}
 		return getChannel() instanceof UDPChannel && (((UDPChannel) getChannel()).hasPending() || requestFramer.remainingData() > 0);
+	}
+	
+	public void setRescheduleRead(boolean reschedule) {
+		this.shouldRescheduleRead = reschedule;
 	}
 	
 	/**

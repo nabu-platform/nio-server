@@ -17,6 +17,9 @@ import be.nabu.utils.cep.impl.CEPUtils;
 import be.nabu.utils.cep.impl.NetworkedComplexEventImpl;
 import be.nabu.utils.io.IOUtils;
 import be.nabu.utils.io.api.ByteBuffer;
+import be.nabu.utils.io.api.EventfulReadableContainer;
+import be.nabu.utils.io.api.EventfulSubscriber;
+import be.nabu.utils.io.api.EventfulSubscription;
 import be.nabu.utils.io.api.ReadableContainer;
 import be.nabu.utils.io.api.WritableContainer;
 import be.nabu.utils.io.containers.CountingWritableContainerImpl;
@@ -32,12 +35,14 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	private ByteBuffer buffer = IOUtils.newByteBuffer(BUFFER_SIZE, true);
 	private CountingWritableContainerImpl<ByteBuffer> output;
 	private MessagePipelineImpl<?, T> pipeline;
-	private ReadableContainer<ByteBuffer> readable;
+	private volatile ReadableContainer<ByteBuffer> readable;
 	private boolean keepAlive = true;
 	private MetricTimer timer;
 	private Date started;
 	private volatile boolean writing = true;
 	private volatile boolean closeWhenEmpty = false;
+	private volatile int missingContentCounter = 0;
+	private volatile EventfulSubscription subscription;
 	
 	ResponseWriter(MessagePipelineImpl<?, T> pipeline, WritableContainer<ByteBuffer> output) {
 		this.pipeline = pipeline;
@@ -122,7 +127,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				return false;
 			}
 			response = pipeline.getResponseQueue().poll();
-
+			
 			MetricInstance metrics = pipeline.getServer().getMetrics();
 			// if no response, the queue is empty
 			if (response == null) {
@@ -172,7 +177,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 	private boolean flush() throws IOException {
 		boolean open = (pipeline.getChannel() instanceof SocketChannel && ((SocketChannel) pipeline.getChannel()).isConnected() && !((SocketChannel) pipeline.getChannel()).socket().isOutputShutdown())
 			|| (!(pipeline.getChannel() instanceof SocketChannel) && pipeline.getChannel().isOpen());
-		
+
 		if (!pipeline.isClosed() && open) {
 			// flush the buffer (if required)
 			if (buffer.remainingData() == 0 || buffer.remainingData() == output.write(buffer)) {
@@ -180,6 +185,13 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				if (readable != null) {
 					long read = 0;
 					while ((read = readable.read(buffer)) > 0) {
+						// if we still have a subscription, cancel it, we have data for now
+						if (subscription != null) {
+							subscription.unsubscribe();
+							subscription = null;
+						}
+						// we read something from the input, reset counter
+						missingContentCounter = 0;
 						// if the output is shut down, close the pipeline
 						if (output.write(buffer) < 0) {
 							close();
@@ -192,6 +204,10 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 					}
 					// if we read the end of the stream, toss it
 					if (read < 0) {
+						if (subscription != null) {
+							subscription.unsubscribe();
+							subscription = null;
+						}
 						try {
 							readable.close();
 						}
@@ -217,8 +233,67 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 				}
 				else {
 					logger.debug("Not all response content could be written, rescheduling the writer for: {}", pipeline);
-					// make sure we can reschedule it and no one can reschedule while we toggle the boolean
-					pipeline.registerWriteInterest();
+					// if we have data remaining in the buffer, we definitely could not write everything to the socket, register a write interest
+					if (buffer.remainingData() > 0) {
+						pipeline.registerWriteInterest();
+					}
+					// otherwise, we try to reschedule it smartly when new data will arrive
+					else if (readable instanceof EventfulReadableContainer) {
+						// because of how the threads can interact, we need to do at least one more full cycle of trying to write (and pulling data) before we go into "sleep" and wait for the subscription to trigger us
+//						System.out.println("---------------------> waiting for eventful data");
+						if (subscription == null) {
+							subscription = ((EventfulReadableContainer<?>) readable).availableData(new EventfulSubscriber() {
+								@Override
+								public void on(EventfulSubscription sub) {
+//									System.out.println("it happened!!");
+									// due to extreme concurrency, this can happen
+									// we want to err on the side of caution and still enable the write interest
+									if (subscription != null) {
+										subscription.unsubscribe();
+										subscription = null;
+									}
+									pipeline.registerWriteInterest();
+								}
+							});
+							pipeline.registerWriteInterest();
+						}
+						else {
+							pipeline.unregisterWriteInterest();
+						}
+					}
+					// otherwise we register it not so smartly...
+					else {
+						pipeline.registerWriteInterest();
+						
+						// this was temporary for streaming tests, remove
+//						System.out.println("---------------------> no eventful data :(");
+						// we do not have a problem writing stuff to the output but getting stuff from the input, do a delayed write interest, otherwise it will start pinging immediately
+//						pipeline.unregisterWriteInterest();
+//						pipeline.getServer().submitIOTask(new Runnable() {
+//							@Override
+//							public void run() {
+//								try {
+//									Thread.sleep(100);
+//								}
+//								catch (InterruptedException e) {
+//									// do nothing
+//								}
+//								// we are up to a minute of missed content, we assume that the pipeline is dead
+//								if (++missingContentCounter == 10 * 60) {
+//									logger.warn("Input for write timed out, started at {} with a timeout value of {}", started, pipeline.getWriteTimeout());
+//									
+//									NetworkedComplexEventImpl event = CEPUtils.newServerNetworkEvent(getClass(), "response-input-timeout", pipeline.getSourceContext().getSocketAddress());
+//									event.setStarted(started);
+//									event.setStopped(new Date());
+//									event.setSeverity(EventSeverity.WARNING);
+//									pipeline.getServer().fire(event, pipeline.getServer());
+//									
+//									pipeline.close();
+//								}
+//								pipeline.registerWriteInterest();
+//							}
+//						});
+					}
 				}
 				return false;
 			}
@@ -232,6 +307,7 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 			}
 		}
 		else {
+			pipeline.unregisterWriteInterest();
 			logger.debug("Skipping flush (closed: " + pipeline.isClosed() + ", open: " + open + ")");
 			close();
 			return false;
