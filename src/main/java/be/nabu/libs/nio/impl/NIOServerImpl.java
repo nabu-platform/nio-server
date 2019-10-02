@@ -250,6 +250,7 @@ public class NIOServerImpl implements NIOServer {
 														metrics.increment(METRIC_ACCEPTED_CONNECTIONS + ":" + getUserId(clientSocketChannel.socket().getRemoteSocketAddress()), 1l);
 													}
 													if (event != null) {
+														event.setSeverity(EventSeverity.DEBUG);
 						        						eventTarget.fire(event, this);
 						        					}
 													dispatcher.fire(new ConnectionEventImpl(this, newPipeline, ConnectionEvent.ConnectionState.CONNECTED), this);

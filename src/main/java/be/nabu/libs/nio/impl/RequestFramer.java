@@ -128,7 +128,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		}
 		catch (IOException e) {
 			closeConnection = true;
-			logger.warn("Could not process incoming data", e);		// TODO: set back to debug? it does have the tendency to hide stuff though...
+			logger.debug("Could not process incoming data", e);		// debug does have the tendency to hide stuff though...but a lot of stuff is just acceptable behavior that we don't need to be notified about (tcp rsts etc)
 		}
 		catch (Exception e) {
 			closeConnection = true;
