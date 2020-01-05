@@ -189,13 +189,21 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			}
 		}
 	}
-	
+
 	public void registerWriteInterest() {
 		server.setWriteInterest(selectionKey, true);
 	}
 	
 	public void unregisterWriteInterest() {
 		server.setWriteInterest(selectionKey, false);
+	}
+	
+	public void registerReadInterest() {
+		server.setReadInterest(selectionKey, true);
+	}
+	
+	public void unregisterReadInterest() {
+		server.setReadInterest(selectionKey, false);
 	}
 	
 	@Override
@@ -209,6 +217,9 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			synchronized(this) {
 				if (force || futureRead == null || futureRead.isDone()) {
 					futureRead = server.submitIOTask(requestFramer);
+				}
+				else {
+					shouldRescheduleRead = true;
 				}
 			}
 		}
@@ -578,6 +589,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		return context;
 	}
 
+	@Override
 	public SelectionKey getSelectionKey() {
 		return selectionKey;
 	}

@@ -14,6 +14,7 @@ public interface NIOServer extends Server, EventTarget {
 	public Future<?> submitProcessTask(Runnable runnable);
 	public void close(SelectionKey key);
 	public void setWriteInterest(SelectionKey key, boolean isInterested);
+	public void setReadInterest(SelectionKey key, boolean isInterested);
 	public void upgrade(SelectionKey key, Pipeline pipeline);
 	public PipelineFactory getPipelineFactory();
 	public Collection<Pipeline> getPipelines();

@@ -393,6 +393,21 @@ public class NIOServerImpl implements NIOServer {
 	}
 	
 	@Override
+	public void setReadInterest(SelectionKey selectionKey, boolean isInterested) {
+		int interestOps = selectionKey.interestOps();
+		if (isInterested) {
+			interestOps |= SelectionKey.OP_READ;
+		}
+		else {
+			interestOps &= ~SelectionKey.OP_READ;
+		}
+		selectionKey.interestOps(interestOps);
+		if (selector != null) {
+			selector.wakeup();
+		}		
+	}
+	
+	@Override
 	public void stop() {
 		stopping = true;
 		if (channel != null) {

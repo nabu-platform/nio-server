@@ -1,6 +1,7 @@
 package be.nabu.libs.nio.api;
 
 import java.io.Closeable;
+import java.nio.channels.SelectionKey;
 import java.util.Date;
 import java.util.Map;
 
@@ -55,4 +56,8 @@ public interface Pipeline extends Closeable {
 	 * A generic context container where you can store things linked to the pipeline
 	 */
 	public Map<String, Object> getContext();
+	/**
+	 * Returns the selection key for this pipeline
+	 */
+	public SelectionKey getSelectionKey();
 }

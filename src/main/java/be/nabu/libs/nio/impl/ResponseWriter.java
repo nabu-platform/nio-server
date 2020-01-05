@@ -259,6 +259,13 @@ public class ResponseWriter<T> implements Closeable, Runnable {
 						}
 						else {
 							pipeline.unregisterWriteInterest();
+							// due to extreme concurrency, it is possible that we trigger the availableData() handler and set the subscription to null _after_ we have calculated the conditional
+							// if that thread is faster, it will register a write interest which is _immediately_ undone by the above line
+							// to that end, we check again (after the line) if the subscription has been unset by another thread
+							// if so, we re-register the write interest
+							if (subscription == null) {
+								pipeline.registerWriteInterest();
+							}
 						}
 					}
 					// otherwise we register it not so smartly...

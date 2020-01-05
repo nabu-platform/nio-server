@@ -77,11 +77,26 @@ public class RequestFramer<T> implements Runnable, Closeable {
 					timer = metrics.start(PARSE_TIME + ":" + NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress()));
 				}
 			}
+			readable.setRead(false);
 			originalBufferSize = readable.getBufferSize();
 			originalCount = counting.getReadTotal();
 			framer.push(readable);
 			newBufferSize = readable.getBufferSize();
 			newCount = counting.getReadTotal();
+			
+			// if we are still streaming and read nothing, stop the read interest
+			if (framer instanceof StreamingMessageParser) {
+				// if you didn't read at all and are in streaming mode, we assume the target is full, unregister a read interest or it keeps on triggering
+				// note that if before this thread is done, the streaming mode kicks in again, the reschedule flag is set and we set the read interest again at the end
+				// this still leaves a tiny window of time where the read interest could stay disabled even though we want new data (after the else if in this and before the future of this thread returns)
+				// to be safe, it is advised to kickstart the reading process in the streaming message framer, note that if we assume this is the case, the read interest we kickstart at the end of this run can probably be removed entirely
+				if (framer.isDone() && !readable.isRead() && !((StreamingMessageParser<?>) framer).isStreamed()) {
+					pipeline.unregisterReadInterest();
+				}
+				else {
+					pipeline.registerReadInterest();
+				}
+			}
 			
 			if (framer.isClosed()) {
 				closeConnection = true;
@@ -150,6 +165,10 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		// if the buffer sizes don't match, _something_ changed, either there is new data or data disappeared to form a message
 		// if the buffer size remains the same and > 0, there is a partial message (or garbage) in there and we don't want to keep scheduling reads
 		else if (pipeline.rescheduleRead() || (originalCount != newCount) || (originalBufferSize != newBufferSize)) {
+			// if we were forced into reading again, there might be new data
+			if (framer instanceof StreamingMessageParser) {
+				pipeline.registerReadInterest();
+			}
 			pipeline.read(true);
 		}
 	}

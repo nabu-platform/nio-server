@@ -193,6 +193,13 @@ public class UDPServerImpl implements NIOServer {
 			throw new UnsupportedOperationException();
 		}
 	}
+	
+	@Override
+	public void setReadInterest(SelectionKey key, boolean isInterested) {
+		if (isInterested) {
+			throw new UnsupportedOperationException();
+		}
+	}
 
 	@Override
 	public void upgrade(SelectionKey key, Pipeline pipeline) {
