@@ -220,12 +220,25 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 				}
 				else {
 					shouldRescheduleRead = true;
+					registerDelayedReadInterest();
 				}
 			}
 		}
 		else {
 			shouldRescheduleRead = true;
+			registerDelayedReadInterest();
 		}
+	}
+
+	// there is an edge case where the reading stops, we want to make sure we always kick start it, preferably one time too many than one time too little
+	// we just want to avoid a CPU-gone-mad scenario
+	// in non-streaming mode, the read interest is always on, so doesn't really matter
+	private void registerDelayedReadInterest() {
+		server.submitIOTask(new Runnable() {
+			public void run() {
+				registerReadInterest();
+			}
+		});
 	}
 	
 	@Override
