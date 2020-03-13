@@ -7,4 +7,8 @@ package be.nabu.libs.nio.api;
  */
 public interface StreamingMessageParser<T> extends MessageParser<T> {
 	public boolean isStreamed();
+	// even a streaming parser can choose not to enable streaming mode
+	public default boolean isStreaming() {
+		return true;
+	}
 }

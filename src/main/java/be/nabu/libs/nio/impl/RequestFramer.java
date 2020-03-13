@@ -85,7 +85,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 			newCount = counting.getReadTotal();
 			
 			// if we are still streaming and read nothing, stop the read interest
-			if (framer instanceof StreamingMessageParser) {
+			if (framer instanceof StreamingMessageParser && ((StreamingMessageParser<?>) framer).isStreaming()) {
 				// if you didn't read at all and are in streaming mode, we assume the target is full, unregister a read interest or it keeps on triggering
 				// note that if before this thread is done, the streaming mode kicks in again, the reschedule flag is set and we set the read interest again at the end
 				// this still leaves a tiny window of time where the read interest could stay disabled even though we want new data (after the else if in this and before the future of this thread returns)
@@ -166,7 +166,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 		// if the buffer size remains the same and > 0, there is a partial message (or garbage) in there and we don't want to keep scheduling reads
 		else if (pipeline.rescheduleRead() || (originalCount != newCount) || (originalBufferSize != newBufferSize)) {
 			// if we were forced into reading again, there might be new data
-			if (framer instanceof StreamingMessageParser) {
+			if (framer instanceof StreamingMessageParser && ((StreamingMessageParser<?>) framer).isStreaming()) {
 				pipeline.registerReadInterest();
 			}
 			pipeline.read(true);
