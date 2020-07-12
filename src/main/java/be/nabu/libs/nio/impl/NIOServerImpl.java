@@ -168,7 +168,7 @@ public class NIOServerImpl implements NIOServer {
 		InetSocketAddress remoteSocketAddress = ((InetSocketAddress) address);
 		return remoteSocketAddress == null ? "unknown" : remoteSocketAddress.getAddress().getHostAddress() + ":" + remoteSocketAddress.getPort();
 	}
-	
+
 	@SuppressWarnings("unchecked")
 	public void start() throws IOException {
 		startPools();

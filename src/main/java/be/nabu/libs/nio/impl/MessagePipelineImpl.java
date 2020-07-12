@@ -25,6 +25,7 @@ import org.slf4j.MDC;
 import be.nabu.libs.nio.api.ExceptionFormatter;
 import be.nabu.libs.nio.api.KeepAliveDecider;
 import be.nabu.libs.nio.api.MessageFormatterFactory;
+import be.nabu.libs.nio.api.MessageParser;
 import be.nabu.libs.nio.api.MessageParserFactory;
 import be.nabu.libs.nio.api.MessagePipeline;
 import be.nabu.libs.nio.api.MessageProcessorFactory;
@@ -33,6 +34,7 @@ import be.nabu.libs.nio.api.PipelineState;
 import be.nabu.libs.nio.api.PipelineWithMetaData;
 import be.nabu.libs.nio.api.SecurityContext;
 import be.nabu.libs.nio.api.SourceContext;
+import be.nabu.libs.nio.api.StreamingMessageParser;
 import be.nabu.libs.nio.api.UpgradeableMessagePipeline;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
@@ -91,6 +93,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private SocketAddress remoteAddress;
 	private Integer localPort;
 	private volatile boolean shouldRescheduleRead = false;
+	private boolean streamingMode;
 	
 	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
 		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null, 0);
@@ -137,6 +140,11 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.responseWriter = new ResponseWriter<R>(this, container);
 		this.requestProcessor = new RequestProcessor<T, R>(this);
 		
+		// attempt to deduce streaming mode (should be refactored!)
+		MessageParser<T> newMessageParser = requestParserFactory.newMessageParser();
+		streamingMode = newMessageParser instanceof StreamingMessageParser && ((StreamingMessageParser<?>) newMessageParser).isStreaming();
+		newMessageParser = null;
+		
 		initMetadata();
 	}
 	
@@ -156,6 +164,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		this.requestFramer = new RequestFramer<T>(this, container);
 		this.responseWriter = new ResponseWriter<R>(this, container);
 		this.requestProcessor = new RequestProcessor<T, R>(this);
+		this.streamingMode = parentPipeline.streamingMode;
 		
 		initMetadata();
 	}
@@ -229,16 +238,18 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			registerDelayedReadInterest();
 		}
 	}
-
-	// there is an edge case where the reading stops, we want to make sure we always kick start it, preferably one time too many than one time too little
-	// we just want to avoid a CPU-gone-mad scenario
-	// in non-streaming mode, the read interest is always on, so doesn't really matter
+	// IMPORTANT: a performance test was severely impacted by this piece of code. printing out the amount of I/O tasks, 10.000 incoming calls (new connections) without this bit of code let to 41.000 I/O tasks
+	// With this bit of code enabled, the same load generated 350.000 I/O tasks, this actually exploded the memory usage of the tasks waiting to be run, and we ran into GC death
+	// TODO: refactor this code for streaming mode!!
+	// there is an edge case where the reading stops, we want to make sure we always kick start it, preferably one time too many than one time too little, we just want to avoid a CPU-gone-mad scenario in non-streaming mode, the read interest is always on, so doesn't really matter
 	private void registerDelayedReadInterest() {
-		server.submitIOTask(new Runnable() {
-			public void run() {
-				registerReadInterest();
-			}
-		});
+		if (streamingMode) {
+			server.submitIOTask(new Runnable() {
+				public void run() {
+					registerReadInterest();
+				}
+			});
+		}
 	}
 	
 	@Override
