@@ -1,6 +1,7 @@
 package be.nabu.libs.nio.api;
 
 import java.io.Closeable;
+import java.net.SocketAddress;
 import java.nio.channels.SelectionKey;
 import java.util.Date;
 import java.util.Map;
@@ -60,4 +61,9 @@ public interface Pipeline extends Closeable {
 	 * Returns the selection key for this pipeline
 	 */
 	public SelectionKey getSelectionKey();
+	/**
+	 * When the connection is being proxied, we only have access to the proxy address initially
+	 * If the protocol used allows you to get the original connection information, that is generally much more relevant
+	 */
+	public void setRemoteAddress(SocketAddress address);
 }

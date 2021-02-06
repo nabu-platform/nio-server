@@ -90,7 +90,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private boolean closed;
 	private boolean useSsl;
 	private boolean debug = Boolean.parseBoolean(System.getProperty("nio.debug.pipeline", "false"));
-	private SocketAddress remoteAddress;
+	private SocketAddress remoteAddress, originalRemoteAddress;
 	private Integer localPort;
 	private volatile boolean shouldRescheduleRead = false;
 	private boolean streamingMode;
@@ -616,6 +616,17 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	@Override
 	public SelectionKey getSelectionKey() {
 		return selectionKey;
+	}
+
+	@Override
+	public void setRemoteAddress(SocketAddress address) {
+		// we do keep track of the original
+		if (originalRemoteAddress == null) {
+			originalRemoteAddress = remoteAddress;
+		}
+		// if we set the address to null, we fall back to the original address
+		// way too much code is not expecting this to be null
+		remoteAddress = address == null ? originalRemoteAddress : address;
 	}
 	
 }
