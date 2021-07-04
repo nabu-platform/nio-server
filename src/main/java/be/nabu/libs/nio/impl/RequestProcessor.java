@@ -1,5 +1,8 @@
 package be.nabu.libs.nio.impl;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import be.nabu.libs.metrics.api.MetricInstance;
 import be.nabu.libs.metrics.api.MetricTimer;
 import be.nabu.libs.nio.PipelineUtils;
@@ -9,7 +12,10 @@ public class RequestProcessor<T, R> implements Runnable {
 
 	public static final String PROCESS_TIME = "processTime";
 	
+	private static ThreadLocal<Object> currentRequest = new ThreadLocal<Object>();
+	
 	private MessagePipelineImpl<T, R> pipeline;
+	private Logger logger = LoggerFactory.getLogger(getClass());
 
 	RequestProcessor(MessagePipelineImpl<T, R> pipeline) {
 		this.pipeline = pipeline;
@@ -28,6 +34,7 @@ public class RequestProcessor<T, R> implements Runnable {
 				}
 				R response;
 				try {
+					currentRequest.set(request);
 					MessageProcessor<T, R> processor = pipeline.getMessageProcessorFactory().newProcessor(request);
 					if (processor == null) {
 						throw new IllegalArgumentException("There is no processor for the request");
@@ -43,7 +50,17 @@ public class RequestProcessor<T, R> implements Runnable {
 					}
 				}
 				catch (Exception e) {
-					response = pipeline.getExceptionFormatter().format(request, e);
+					try {
+						response = pipeline.getExceptionFormatter().format(request, e);
+					}
+					catch (Exception f) {
+						logger.error("Could not format exception", f);
+						pipeline.close();
+						throw new RuntimeException(f);
+					}
+				}
+				finally {
+					currentRequest.set(null);
 				}
 				if (response != null) {
 					pipeline.getResponseQueue().add(response);
@@ -53,6 +70,10 @@ public class RequestProcessor<T, R> implements Runnable {
 		finally {
 			PipelineUtils.setPipelineForThread(null);
 		}
+	}
+	
+	public static Object getCurrentRequest() {
+		return currentRequest.get();
 	}
 
 }
