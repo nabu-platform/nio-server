@@ -38,6 +38,7 @@ import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.Pipeline;
 import be.nabu.libs.nio.api.PipelineFactory;
 import be.nabu.libs.nio.api.PipelineState;
+import be.nabu.libs.nio.api.PipelineWithTimeout;
 import be.nabu.libs.nio.api.events.ConnectionEvent;
 import be.nabu.libs.nio.impl.events.ConnectionEventImpl;
 import be.nabu.utils.cep.api.EventSeverity;
@@ -347,6 +348,14 @@ public class NIOServerImpl implements NIOServer {
 					lastActivity = next.getValue().getLastWritten();
 				}
 				Date now = new Date();
+				Long maxIdleTime = this.maxIdleTime;
+				Long maxLifeTime = this.maxLifeTime;
+				if (next.getValue() instanceof PipelineWithTimeout && ((PipelineWithTimeout) next.getValue()).getMaxIdleTime() != null) {
+					maxIdleTime = ((PipelineWithTimeout) next.getValue()).getMaxIdleTime();
+				}
+				if (next.getValue() instanceof PipelineWithTimeout && ((PipelineWithTimeout) next.getValue()).getMaxLifeTime() != null) {
+					maxLifeTime = ((PipelineWithTimeout) next.getValue()).getMaxLifeTime();
+				}
 				// the connection is gone
 				if ((!next.getKey().isConnected() && !next.getKey().isConnectionPending())
 					// the connection has exceeded its max lifetime and it is currently idle
@@ -428,6 +437,13 @@ public class NIOServerImpl implements NIOServer {
 			}
 		}
 		if (selector != null) {
+			// force the selector to stop blocking, this might keep the channel open!
+			try {
+				selector.wakeup();
+			}
+			catch (Exception e) {
+				logger.error("Failed to wakeup selector", e);
+			}
 			try {
 				selector.close();
 				selector = null;

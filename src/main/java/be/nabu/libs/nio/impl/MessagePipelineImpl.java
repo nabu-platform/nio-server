@@ -32,6 +32,7 @@ import be.nabu.libs.nio.api.MessageProcessorFactory;
 import be.nabu.libs.nio.api.NIOServer;
 import be.nabu.libs.nio.api.PipelineState;
 import be.nabu.libs.nio.api.PipelineWithMetaData;
+import be.nabu.libs.nio.api.PipelineWithTimeout;
 import be.nabu.libs.nio.api.SecurityContext;
 import be.nabu.libs.nio.api.SourceContext;
 import be.nabu.libs.nio.api.StreamingMessageParser;
@@ -54,7 +55,7 @@ import be.nabu.utils.io.containers.bytes.SocketByteContainer;
  * This means the response writer will assume it succeeded (because in the past there was no buffer) and unregister the write interest
  * This can lead (in some cases) to missed data _if_ the buffer contained more content than the socket buffers could handle.
  */
-public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R>, PipelineWithMetaData {
+public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, R>, PipelineWithMetaData, PipelineWithTimeout {
 	
 	private Date created = new Date();
 	private Date lastRead, lastWritten, lastProcessed;
@@ -80,6 +81,8 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private int requestLimit, responseLimit;
 	private Map<String, Object> metaData = Collections.synchronizedMap(new HashMap<String, Object>());
 	private Map<String, Object> context = Collections.synchronizedMap(new HashMap<String, Object>());
+	
+	private Long maxLifeTime, maxIdleTime;
 	
 	/**
 	 * It is possible that this pipeline replaced an existing pipeline (for example after a connection upgrade or a live protocol switch)
@@ -629,6 +632,22 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		// if we set the address to null, we fall back to the original address
 		// way too much code is not expecting this to be null
 		remoteAddress = address == null ? originalRemoteAddress : address;
+	}
+
+	@Override
+	public Long getMaxLifeTime() {
+		return maxLifeTime;
+	}
+	public void setMaxLifeTime(Long maxLifeTime) {
+		this.maxLifeTime = maxLifeTime;
+	}
+
+	@Override
+	public Long getMaxIdleTime() {
+		return maxIdleTime;
+	}
+	public void setMaxIdleTime(Long maxIdleTime) {
+		this.maxIdleTime = maxIdleTime;
 	}
 	
 }
