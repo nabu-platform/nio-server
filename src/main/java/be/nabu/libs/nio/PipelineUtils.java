@@ -1,5 +1,7 @@
 package be.nabu.libs.nio;
 
+import java.util.UUID;
+
 import be.nabu.libs.nio.api.Pipeline;
 
 public class PipelineUtils {
@@ -12,5 +14,19 @@ public class PipelineUtils {
 	
 	public static Pipeline getPipeline() {
 		return pipeline.get();
+	}
+	
+	public static String getPipelineId(Pipeline pipeline) {
+		Object object = pipeline.getContext().get("pipeline-id");
+		if (object == null) {
+			object = UUID.randomUUID().toString().replace("-", "");
+			pipeline.getContext().put("pipeline-id", object);
+		}
+		return object.toString();
+	}
+	
+	public static String getPipelineId() {
+		Pipeline pipeline = getPipeline();
+		return pipeline == null ? null : getPipelineId(pipeline);
 	}
 }
