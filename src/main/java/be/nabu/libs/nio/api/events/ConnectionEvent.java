@@ -8,6 +8,7 @@ public interface ConnectionEvent {
 	public enum ConnectionState {
 		CONNECTED,
 		REJECTED,
+		BEFORE_CLOSE,
 		CLOSED,
 		// after the connection has been closed and no additional data in the input, we send out an empty event 
 		EMPTY,

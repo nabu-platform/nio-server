@@ -146,11 +146,30 @@ public class NIOServerImpl implements NIOServer {
 				selectionKey.cancel();
 				if (channels.containsKey(selectionKey.channel())) {
 					Pipeline removed;
+					// the websockets can put interesting data in the pipeline context
+					// however, when (in nabu) the user subscribes to disconnect, it was using the CLOSED event initially
+					// this means the actual pipeline is no longer available, nor is the context
+					// so we added a BEFORE_CLOSE state which is triggered before we actually remove the pipeline
+					// in theory the pipeline was always available in the connection event, but this is not "generically" exposed to the user in nabu
+					Pipeline pipeline = channels.get(selectionKey.channel());
+					if (pipeline != null) {
+						try {
+							dispatcher.fire(new ConnectionEventImpl(this, pipeline, ConnectionEvent.ConnectionState.BEFORE_CLOSE), this);
+						}
+						catch (Exception e) {
+							logger.warn("BEFORE_CLOSE dispatching failed", e);
+						}
+					}
 					synchronized(channels) {
 						removed = channels.remove(selectionKey.channel());
 					}
 					if (removed != null) {
-						dispatcher.fire(new ConnectionEventImpl(this, removed, ConnectionEvent.ConnectionState.CLOSED), this);
+						try {
+							dispatcher.fire(new ConnectionEventImpl(this, removed, ConnectionEvent.ConnectionState.CLOSED), this);
+						}
+						catch (Exception e) {
+							logger.warn("CLOSED dispatching failed", e);
+						}
 					}
 				}
 			}
