@@ -59,6 +59,8 @@ public class NIOServerImpl implements NIOServer {
 	public static String METRIC_REJECTED_CONNECTIONS = "rejectedConnections";
 	public static String METRIC_CURRENT_CONNECTIONS = "currentConnections";
 	public static String METRIC_ACTIVE_IO_THREADS = "activeIOThreads";
+	public static String METRIC_IO_LOAD = "ioLoad";
+	public static String METRIC_PROCESS_LOAD = "processLoad";
 	public static String METRIC_ACTIVE_PROCESS_THREADS = "activeProcessThreads";
 	public static String METRIC_IDLE_IO_THREADS = "idleIOThreads";
 	public static String METRIC_IDLE_PROCESS_THREADS = "idleProcessThreads";
@@ -192,6 +194,9 @@ public class NIOServerImpl implements NIOServer {
 	@SuppressWarnings("unchecked")
 	public void start() throws IOException {
 		startPools();
+		
+		// if the pools were only now started, we will add gauges to monitor them
+		setMetrics(metrics);
 		
 		channel = ServerSocketChannel.open();
 		channel.bind(new InetSocketAddress(port));		// new InetSocketAddress("localhost", port)
@@ -349,8 +354,22 @@ public class NIOServerImpl implements NIOServer {
 	public void startPools() {
 		if (!executorsShared) {
 			// start the pools
-			ioExecutors = Executors.newFixedThreadPool(ioPoolSize, threadFactory);
-			processExecutors = Executors.newFixedThreadPool(processPoolSize, threadFactory);
+			ioExecutors = Executors.newFixedThreadPool(ioPoolSize, new ThreadFactory() {
+				@Override
+				public Thread newThread(Runnable r) {
+					Thread thread = threadFactory == null ? Executors.defaultThreadFactory().newThread(r) : threadFactory.newThread(r);
+					thread.setName(thread.getName() + "-http-server-io");
+					return thread;
+				}
+			});
+			processExecutors = Executors.newFixedThreadPool(processPoolSize, new ThreadFactory() {
+				@Override
+				public Thread newThread(Runnable r) {
+					Thread thread = threadFactory == null ? Executors.defaultThreadFactory().newThread(r) : threadFactory.newThread(r);
+					thread.setName(thread.getName() + "-http-server-process");
+					return thread;
+				}
+			});
 		}
 	}
 	
@@ -578,6 +597,14 @@ public class NIOServerImpl implements NIOServer {
 						return ((ThreadPoolExecutor) ioExecutors).getMaximumPoolSize() - ((ThreadPoolExecutor) ioExecutors).getActiveCount();
 					}
 				});
+				metrics.set(METRIC_IO_LOAD, new MetricGauge() {
+					@Override
+					public long getValue() {
+						double activeCount = ((ThreadPoolExecutor) ioExecutors).getActiveCount();
+						double maximumPoolSize = ((ThreadPoolExecutor) ioExecutors).getMaximumPoolSize();
+						return (long) ((activeCount / maximumPoolSize) * 100);
+					}
+				});
 			}
 			if (processExecutors instanceof ThreadPoolExecutor) {
 				metrics.set(METRIC_ACTIVE_PROCESS_THREADS, new MetricGauge() {
@@ -590,6 +617,14 @@ public class NIOServerImpl implements NIOServer {
 					@Override
 					public long getValue() {
 						return ((ThreadPoolExecutor) processExecutors).getMaximumPoolSize() - ((ThreadPoolExecutor) processExecutors).getActiveCount();
+					}
+				});
+				metrics.set(METRIC_PROCESS_LOAD, new MetricGauge() {
+					@Override
+					public long getValue() {
+						double activeCount = ((ThreadPoolExecutor) processExecutors).getActiveCount();
+						double maximumPoolSize = ((ThreadPoolExecutor) processExecutors).getMaximumPoolSize();
+						return (long) ((activeCount / maximumPoolSize) * 100);
 					}
 				});
 			}

@@ -115,10 +115,10 @@ public class RequestFramer<T> implements Runnable, Closeable {
 					if (timer != null) {
 						long timed = timer.stop();
 						String userId = NIOServerImpl.getUserId(pipeline.getSourceContext().getSocketAddress());
-						long readSize = counting.getReadTotal() - readable.getBufferSize();
-						long transferRate = readSize / Math.max(1, timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS));
-						timer.getMetrics().log(REQUEST_SIZE + ":" + userId, readSize);
-						timer.getMetrics().log(TRANSFER_RATE + ":" + userId, transferRate);
+						double readSize = counting.getReadTotal() - readable.getBufferSize();
+						double transferRate = readSize / Math.max(1, timer.getTimeUnit().convert(timed, TimeUnit.MILLISECONDS));
+						timer.getMetrics().log(REQUEST_SIZE + ":" + userId, (long) readSize);
+						timer.getMetrics().log(TRANSFER_RATE + ":" + userId, (long) transferRate);
 						timer = null;
 						started = null;
 					}

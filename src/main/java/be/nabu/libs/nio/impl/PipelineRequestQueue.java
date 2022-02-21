@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import be.nabu.libs.metrics.api.MetricInstance;
 
 public class PipelineRequestQueue<T> extends ConcurrentLinkedQueue<T> implements Closeable {
-
+	// a delta sink is used to do the increment, however we added automated windowing on the statistics. this means we reset the statistics for each window, but the delta sink is not reset. this in turn means the "amount" is correct but the "ema" etc is the full count since startup
 	public static final String METRIC_REQUESTS = "requests";
 	
 	private static final long serialVersionUID = 1L;
