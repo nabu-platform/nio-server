@@ -201,6 +201,7 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 			}
 		}
 	}
+	
 
 	public void registerWriteInterest() {
 		server.setWriteInterest(selectionKey, true);
@@ -210,8 +211,19 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		server.setWriteInterest(selectionKey, false);
 	}
 	
+	private long lastReadInterest;
+	
 	public void registerReadInterest() {
+		lastReadInterest = new Date().getTime();
 		server.setReadInterest(selectionKey, true);
+	}
+	
+	public void unregisterReadInterest(long requestFramerStart) {
+		// we only unset it if the framer started reading _after_ we last set the read interest
+		// this should make sure we don't unset it if there is new data waiting
+		if (requestFramerStart > lastReadInterest) {
+			server.setReadInterest(selectionKey, false);	
+		}
 	}
 	
 	public void unregisterReadInterest() {
@@ -228,17 +240,19 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		if (force || futureRead == null || futureRead.isDone()) {
 			synchronized(this) {
 				if (force || futureRead == null || futureRead.isDone()) {
+					// update the submitted timestamp so we know if we should disable the reading part
+					requestFramer.setSubmitted(new Date().getTime());
 					futureRead = server.submitIOTask(requestFramer);
 				}
 				else {
 					shouldRescheduleRead = true;
-					registerDelayedReadInterest();
+//					registerDelayedReadInterest();
 				}
 			}
 		}
 		else {
 			shouldRescheduleRead = true;
-			registerDelayedReadInterest();
+//			registerDelayedReadInterest();
 		}
 	}
 	// IMPORTANT: a performance test was severely impacted by this piece of code. printing out the amount of I/O tasks, 10.000 incoming calls (new connections) without this bit of code let to 41.000 I/O tasks

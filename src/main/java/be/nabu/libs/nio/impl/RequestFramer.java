@@ -33,6 +33,9 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	
 	private static final int BUFFER_SIZE = 16384;
 	
+	// when it was submitted
+	private long submitted;
+	
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private PushbackContainerImpl<ByteBuffer> readable;
 	private CountingReadableContainerImpl<ByteBuffer> counting;
@@ -91,7 +94,7 @@ public class RequestFramer<T> implements Runnable, Closeable {
 				// this still leaves a tiny window of time where the read interest could stay disabled even though we want new data (after the else if in this and before the future of this thread returns)
 				// to be safe, it is advised to kickstart the reading process in the streaming message framer, note that if we assume this is the case, the read interest we kickstart at the end of this run can probably be removed entirely
 				if (framer.isDone() && !readable.isRead() && !((StreamingMessageParser<?>) framer).isStreamed()) {
-					pipeline.unregisterReadInterest();
+					pipeline.unregisterReadInterest(submitted);
 				}
 				else {
 					pipeline.registerReadInterest();
@@ -179,5 +182,13 @@ public class RequestFramer<T> implements Runnable, Closeable {
 	
 	public void drain() {
 		closeWhenDone = true;
+	}
+
+	public long getSubmitted() {
+		return submitted;
+	}
+
+	public void setSubmitted(long submitted) {
+		this.submitted = submitted;
 	}
 }
