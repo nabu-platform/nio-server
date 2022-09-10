@@ -515,7 +515,7 @@ public class NIOServerImpl implements NIOServer {
 		return channel != null;
 	}
 
-	protected void closePipelines() {
+	public void closePipelines() {
 		synchronized(channels) {
 			for (Pipeline pipeline : channels.values()) {
 				try {
