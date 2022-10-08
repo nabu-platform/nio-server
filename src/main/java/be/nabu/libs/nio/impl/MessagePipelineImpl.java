@@ -97,6 +97,8 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	private Integer localPort;
 	private volatile boolean shouldRescheduleRead = false;
 	private boolean streamingMode;
+	// whether we reported the handshake times
+	private boolean handshakeReported = false;
 	
 	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
 		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null, 0);
@@ -253,6 +255,16 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		else {
 			shouldRescheduleRead = true;
 //			registerDelayedReadInterest();
+		}
+		
+		if (!handshakeReported && sslContainer != null) {
+			Long handshakeDuration = sslContainer.getHandshakeDuration();
+			if (handshakeDuration != null) {
+				if (getServer().getMetrics() != null) {
+					getServer().getMetrics().duration("handshake", handshakeDuration, TimeUnit.MILLISECONDS);
+				}
+				handshakeReported = true;
+			}
 		}
 	}
 	// IMPORTANT: a performance test was severely impacted by this piece of code. printing out the amount of I/O tasks, 10.000 incoming calls (new connections) without this bit of code let to 41.000 I/O tasks
