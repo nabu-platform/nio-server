@@ -100,6 +100,8 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 	// whether we reported the handshake times
 	private boolean handshakeReported = false;
 	
+	public static String METRIC_IO_HANDSHAKE_CPU_TIME = "ioHandshakeCpu";
+	
 	public MessagePipelineImpl(NIOServer server, SelectionKey selectionKey, MessageParserFactory<T> requestParserFactory, MessageFormatterFactory<R> responseFormatterFactory, MessageProcessorFactory<T, R> messageProcessorFactory, KeepAliveDecider<R> keepAliveDecider, ExceptionFormatter<T, R> exceptionFormatter) throws IOException {
 		this(server, selectionKey, requestParserFactory, responseFormatterFactory, messageProcessorFactory, keepAliveDecider, exceptionFormatter, false, server.getSSLContext() != null, 0);
 	}
