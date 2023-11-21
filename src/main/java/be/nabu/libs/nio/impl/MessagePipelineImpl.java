@@ -530,6 +530,11 @@ public class MessagePipelineImpl<T, R> implements UpgradeableMessagePipeline<T, 
 		};
 	}
 	
+	@Override
+	public String toString() {
+		return "MessagePipeline[" + getSourceContext().getSocketAddress() + " @" + getSourceContext().getLocalPort() + "]";
+	}
+
 	void putMDCContext() {
 		MDC.put("socket", getChannel() instanceof SocketChannel ? ((SocketChannel) getChannel()).socket().toString() : ((UDPChannel) getChannel()).getTarget().toString());
 	}
