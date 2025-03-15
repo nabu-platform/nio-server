@@ -17,9 +17,18 @@ import be.nabu.utils.io.api.ReadableContainer;
 
 public class StdioPipelineFactory implements PipelineFactory {
 
+	private StdioValidator validator;
+	
+	public StdioPipelineFactory() {
+		this(new StdioValidator(1024l*1024l*10));
+	}
+	public StdioPipelineFactory(StdioValidator validator) {
+		this.validator = validator;
+	}
+	
 	@Override
 	public Pipeline newPipeline(NIOServer server, SelectionKey key) throws IOException {
-		StdioMessageParserFactory requestParserFactory = new StdioMessageParserFactory();
+		StdioMessageParserFactory requestParserFactory = new StdioMessageParserFactory(validator);
 		
 		ExceptionFormatter<String, String> exceptionFormatter = new ExceptionFormatter<String, String>() {
 			@Override
@@ -57,6 +66,14 @@ public class StdioPipelineFactory implements PipelineFactory {
 		requestParserFactory.setPipeline(pipeline);
 		
 		return pipeline;
+	}
+
+	public StdioValidator getValidator() {
+		return validator;
+	}
+
+	public void setValidator(StdioValidator validator) {
+		this.validator = validator;
 	}
 
 }

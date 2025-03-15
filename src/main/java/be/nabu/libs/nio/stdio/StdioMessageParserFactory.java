@@ -9,8 +9,8 @@ public class StdioMessageParserFactory implements MessageParserFactory<String> {
 	private StdioValidator stdioValidator;
 	private MessagePipeline<String, String> pipeline;
 
-	public StdioMessageParserFactory() {
-		stdioValidator = new StdioValidator(1024l*1024l*10);
+	public StdioMessageParserFactory(StdioValidator validator) {
+		this.stdioValidator = validator;
 	}
 	
 	@Override
